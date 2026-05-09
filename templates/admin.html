@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Admin — NextMove{% endblock %}
+{% block content %}
+
+<h1 class="page-title">Admin</h1>
+
+{# ── Top stats ── #}
+<div class="stat-grid" style="grid-template-columns: repeat(4, 1fr);">
+  <div class="stat">
+    <div class="stat-value">{{ stats.total_sequences }}</div>
+    <div class="stat-label">Total sequences</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">{{ stats.total_touchpoints }}</div>
+    <div class="stat-label">Touchpoints generated</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">{{ stats.approved_touchpoints }}</div>
+    <div class="stat-label">Touchpoints approved</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" style="color: var(--success);">${{ "{:,.0f}".format(stats.total_commission) }}</div>
+    <div class="stat-label">Commission earned</div>
+  </div>
+</div>
+
+{# ── Status breakdown ── #}
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px;">
+
+  <div>
+    <div class="section-title">Sequences by status</div>
+    <div class="card" style="padding: 0; overflow: hidden;">
+      <table class="table">
+        <thead>
+          <tr><th>Status</th><th>Count</th></tr>
+        </thead>
+        <tbody>
+          {% set statuses = ['active', 'pending', 'paused', 'generating', 'completed', 'cancelled', 'error'] %}
+          {% for status in statuses %}
+          {% if stats.by_status.get(status) %}
+          <tr>
+            <td><span class="badge badge-{{ status }}">{{ status | title }}</span></td>
+            <td><strong>{{ stats.by_status[status] }}</strong></td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+          {% if not stats.by_status %}
+          <tr><td colspan="2" class="meta" style="text-align: center; padding: 24px;">No sequences yet</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {# ── Per-rep breakdown ── #}
+  <div>
+    <div class="section-title">Activity by rep</div>
+    <div class="card" style="padding: 0; overflow: hidden;">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Rep</th>
+            <th>Total</th>
+            <th>Active</th>
+            <th>Paused</th>
+            <th>Closed</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for rep in stats.by_rep %}
+          <tr>
+            <td><strong>{{ rep.name }}</strong></td>
+            <td>{{ rep.sequences }}</td>
+            <td>{% if rep.active %}<span style="color: var(--success);">{{ rep.active }}</span>{% else %}—{% endif %}</td>
+            <td>{% if rep.paused %}<span style="color: var(--warning);">{{ rep.paused }}</span>{% else %}—{% endif %}</td>
+            <td class="meta">{{ rep.closed or '—' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="meta" style="text-align: center; padding: 24px;">No reps yet</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+{# ── Recent sequences ── #}
+<div class="section-title">Recent sequences</div>
+<div class="card" style="padding: 0; overflow: hidden;">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Company</th>
+        <th>Rep</th>
+        <th>Status</th>
+        <th>Started</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for seq in stats.recent_sequences %}
+      <tr>
+        <td><strong>{{ seq.company_name }}</strong></td>
+        <td class="meta">{{ seq.user_name }}</td>
+        <td><span class="badge badge-{{ seq.status }}">{{ seq.status | title }}</span></td>
+        <td class="meta">{{ seq.created_at[:10] }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="meta" style="text-align: center; padding: 24px;">No sequences yet</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}

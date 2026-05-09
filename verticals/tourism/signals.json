@@ -1,0 +1,100 @@
+{
+  "vertical": "tourism",
+  "pain_points": [
+    "high OTA commission dependency (20-30% per booking)",
+    "low direct booking rate despite strong TripAdvisor presence",
+    "no direct booking widget on website",
+    "Book Now CTA on site but no booking system detectable behind it",
+    "manual reservation management (phone, email)",
+    "poor conversion of web traffic to bookings",
+    "missing international pre-arrival booking channel",
+    "peak season capacity not being captured in advance",
+    "seasonal cash flow pressure",
+    "outdated or underperforming booking software",
+    "competitor booking software that lacks international distribution"
+  ],
+  "positive_signals": [
+    "high TripAdvisor rating (4.5+)",
+    "high TripAdvisor review count (200+)",
+    "strong organic search presence",
+    "existing booking software (easier switch than starting from scratch)",
+    "previous demo or conversation in CRM",
+    "opportunity value recorded",
+    "recent activity in CRM (within 90 days)",
+    "recent ownership change",
+    "new tour or product launch",
+    "Book Now CTA present — intent to take online bookings, even if system is missing or broken",
+    "competitor software detected on site — confirms they are open to using booking technology"
+  ],
+  "negative_signals": [
+    "business listed as for sale or being sold",
+    "DNC flag on key contacts",
+    "explicit 'happy with current software' objection with no follow-up trigger",
+    "Ticketek or similar locked contract",
+    "90%+ walk-in business with no online presence",
+    "bouncing email for primary contact",
+    "no activity in CRM for 6+ months with no context"
+  ],
+  "website_mismatches": [
+    {
+      "signal": "Book Now CTA with no booking system detectable",
+      "what_it_means": "They want online bookings but either have no system, a broken flow, or an undetectable redirect. High-value gap.",
+      "how_to_use": "Surface it gently as an observation — ask what is happening behind the button, not whether they need help."
+    },
+    {
+      "signal": "No booking capability at all (no widget, no CTA)",
+      "what_it_means": "Business is taking bookings offline. International pre-arrival visitors have no way to book direct.",
+      "how_to_use": "Frame in terms of what a potential customer sees when they try to book — not as a flaw, but as a gap worth understanding."
+    },
+    {
+      "signal": "Competitor software on site (Rezdy, Checkfront, Bokun, etc.)",
+      "what_it_means": "They use booking software. May be underserved on international distribution or direct booking share.",
+      "how_to_use": "Ask how it is working for them — specifically around direct vs OTA split. Do not pitch against the software directly."
+    },
+    {
+      "signal": "OTA review badges prominent, no direct booking widget",
+      "what_it_means": "They are sending booking intent to OTAs via their own website. Every Viator click costs them 20-30% commission.",
+      "how_to_use": "Good supporting signal. Rarely a standalone angle — pair with a CRM signal or TripAdvisor presence."
+    },
+    {
+      "signal": "CRM records one software, website shows different software",
+      "what_it_means": "CRM data may be stale, or they have switched systems. Worth clarifying before making assumptions.",
+      "how_to_use": "Note as a gap. Do not lead with it — use it to ask a clarifying question if the conversation opens."
+    }
+  ],
+  "competitor_software": [
+    "Rezdy",
+    "Checkfront",
+    "Bookeo",
+    "Peek Pro",
+    "TrekkSoft",
+    "Bokun",
+    "Regiondo",
+    "Xola"
+  ],
+  "ota_platforms": [
+    "Viator",
+    "GetYourGuide",
+    "Expedia",
+    "TripAdvisor Experiences",
+    "Booking.com Experiences",
+    "Klook",
+    "Airbnb Experiences"
+  ],
+  "decision_maker_titles": [
+    "Owner",
+    "Co-Owner",
+    "Director",
+    "General Manager",
+    "Operations Manager",
+    "Marketing Manager",
+    "Reservations Manager"
+  ],
+  "typical_deal_sizes_usd": {
+    "small": "under 5000",
+    "mid": "5000 to 20000",
+    "large": "over 20000"
+  },
+  "best_outreach_months": ["April", "May", "June", "July", "August"],
+  "avoid_outreach_months": ["November", "December", "January", "February"]
+}

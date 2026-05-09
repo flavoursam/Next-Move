@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Commission — NextMove{% endblock %}
+{% block content %}
+
+<h1 class="page-title">Commission</h1>
+<p style="font-size: 13px; color: var(--muted); margin-bottom: 24px;">
+  10% commission is owed to <strong>{{ owner_name }}</strong> on any demo booked from a lead
+  run through NextMove. All users agree to this when starting a sequence.
+  Demos are detected automatically from Close CRM activity.
+</p>
+
+<div class="stat-grid">
+  <div class="stat">
+    <div class="stat-value" style="color: var(--success);">${{ "{:,.0f}".format(my_total) }}</div>
+    <div class="stat-label">My commission</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">{{ my_events | length }}</div>
+    <div class="stat-label">Demos landed (mine)</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">${{ "{:,.0f}".format(total) }}</div>
+    <div class="stat-label">Team total</div>
+  </div>
+</div>
+
+{% if events %}
+<div class="section-title">Demo commissions — all reps</div>
+<div class="card" style="padding: 0; overflow: hidden;">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Company</th>
+        <th>Rep</th>
+        <th>Deal value</th>
+        <th>Commission (10%)</th>
+        <th>Detected</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in events %}
+      <tr {% if e.user_name == user.name %}style="background: #f0fdf4;"{% endif %}>
+        <td>
+          <strong>{{ e.company_name }}</strong>
+          <div class="meta"><a href="/sequence/{{ e.sequence_id }}">View sequence</a></div>
+        </td>
+        <td class="meta">{{ e.user_name }}{% if e.user_name == user.name %} <span style="color: var(--accent);">★</span>{% endif %}</td>
+        <td>
+          {% if e.opportunity_value_usd %}
+          ${{ "{:,}".format(e.opportunity_value_usd) }}
+          {% else %}
+          <span class="meta">—</span>
+          {% endif %}
+        </td>
+        <td style="font-weight: 600; color: var(--success);">
+          ${{ "{:,.0f}".format(e.commission_amount or 0) }}
+        </td>
+        <td class="meta">{{ e.detected_at[:10] }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card" style="text-align: center; padding: 64px; color: var(--muted);">
+  <p style="font-size: 15px; margin-bottom: 8px;">No demos detected yet.</p>
+  <p style="font-size: 13px;">
+    When Close shows a demo being booked on a lead you've run through NextMove,
+    it will appear here automatically.
+  </p>
+</div>
+{% endif %}
+
+{% endblock %}

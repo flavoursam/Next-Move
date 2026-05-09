@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — NextMove{% endblock %}
+{% block content %}
+
+<h1 class="page-title">Dashboard</h1>
+
+{% if paused %}
+<div style="margin-bottom: 28px;">
+  <div class="section-title">Needs attention</div>
+  {% for seq in paused %}
+  <div class="card" style="border-left: 3px solid var(--warning);">
+    <div class="card-header">
+      <div>
+        <span class="card-title">{{ seq.company_name }}</span>
+        <span class="badge badge-paused" style="margin-left: 8px;">Paused</span>
+      </div>
+      <a href="/sequence/{{ seq.id }}" class="btn btn-warning">Review</a>
+    </div>
+    {% if seq.latest_gate %}
+    <p style="font-size: 13px; color: var(--text); margin-bottom: 4px;">{{ seq.latest_gate.reason }}</p>
+    {% endif %}
+    <p class="meta">
+      <span>Rep: {{ seq.user_name }}</span>
+      <span>{{ seq.touchpoint_count }} touchpoint{% if seq.touchpoint_count != 1 %}s{% endif %}</span>
+      <span>Updated {{ seq.updated_at[:10] }}</span>
+    </p>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="section-title">All sequences</div>
+
+{% set all = paused + active %}
+{% if not all %}
+<div class="card" style="text-align: center; padding: 64px; color: var(--muted);">
+  <p style="font-size: 15px; margin-bottom: 8px;">No sequences yet.</p>
+  <a href="/sequence/new" class="btn btn-primary" style="margin-top: 8px;">Start your first one</a>
+</div>
+{% else %}
+<div class="card" style="padding: 0; overflow: hidden;">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Company</th>
+        <th>Status</th>
+        <th>Touchpoints</th>
+        <th>Rep</th>
+        <th>Updated</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for seq in active %}
+      <tr>
+        <td>
+          <strong>{{ seq.company_name }}</strong>
+          {% if seq.opportunity_value_usd %}
+          <div class="meta">${{ "{:,}".format(seq.opportunity_value_usd) }}</div>
+          {% endif %}
+        </td>
+        <td><span class="badge badge-{{ seq.status }}">{{ seq.status | title }}</span></td>
+        <td class="meta">{{ seq.touchpoint_count }}</td>
+        <td class="meta">{{ seq.user_name }}</td>
+        <td class="meta">{{ seq.updated_at[:10] }}</td>
+        <td><a href="/sequence/{{ seq.id }}" class="btn btn-secondary">View</a></td>
+      </tr>
+      {% endfor %}
+      {% for seq in paused %}
+      <tr style="background: #fffbeb;">
+        <td>
+          <strong>{{ seq.company_name }}</strong>
+          {% if seq.opportunity_value_usd %}
+          <div class="meta">${{ "{:,}".format(seq.opportunity_value_usd) }}</div>
+          {% endif %}
+        </td>
+        <td><span class="badge badge-paused">Paused</span></td>
+        <td class="meta">{{ seq.touchpoint_count }}</td>
+        <td class="meta">{{ seq.user_name }}</td>
+        <td class="meta">{{ seq.updated_at[:10] }}</td>
+        <td><a href="/sequence/{{ seq.id }}" class="btn btn-warning">Review</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% endblock %}

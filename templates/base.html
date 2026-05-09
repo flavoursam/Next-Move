@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}NextMove{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <nav class="nav">
+    <a class="nav-brand" href="/">NextMove</a>
+    <div class="nav-links">
+      <a href="/">Dashboard</a>
+      <a href="/commission">Commission</a>
+      <a href="/sequence/new" class="btn btn-cta">+ New Sequence</a>
+    </div>
+    {% if user %}
+    <div class="nav-user">{{ user.name }}</div>
+    {% endif %}
+  </nav>
+  <main class="main">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
