@@ -2,9 +2,19 @@
 
 ## What it does
 
-NextMove is an AI-powered sales sequencing tool for B2B reps. It connects to a Close CRM lead, runs it through a 5-stage AI reasoning pipeline, and returns a single recommended next action with a ready-to-use outreach asset (email, call script, or voicemail). The rep reviews and approves each touchpoint before anything is sent. Drafts are created directly in Close.
+NextMove is an AI-powered account intelligence platform for B2B sales reps. It connects to Close CRM, builds a persistent memory document per account, and surfaces a recommended next action with a ready-to-use outreach asset (email, call script, or voicemail). Reps review and approve each recommendation before anything is sent. Drafts are created directly in Close.
 
-Between touchpoints, NextMove monitors the CRM for meaningful activity and pauses the sequence automatically if a real conversation has occurred — so the rep always acts on current information, not a stale plan.
+Between approvals, NextMove monitors Close for new activity, updates account memory automatically, and generates a fresh recommendation. Confidence in identified pain points decays over time if not confirmed by new signals, ensuring memory stays honest.
+
+---
+
+## Two parallel systems
+
+### Account intelligence (primary)
+Stateful. Persistent memory per account, updated hourly from Close signals. Memory-based and fresh-pipeline recommendations shown side by side on the account detail page.
+
+### Legacy sequences
+Stateless. Each touchpoint re-runs the full 5-stage pipeline fresh against Close. Still intact at `/`.
 
 ---
 
@@ -17,10 +27,10 @@ Between touchpoints, NextMove monitors the CRM for meaningful activity and pause
 │   ┌──────────────────┐              ┌──────────────────────────────────┐   │
 │   │   Close.io CRM   │              │         Claude API (Anthropic)   │   │
 │   │                  │              │                                  │   │
-│   │  - Lead data     │              │  - claude-sonnet-4-6 (default)  │   │
-│   │  - Activities    │              │  - claude-haiku-4-5 (testing)   │   │
-│   │  - Email drafts  │              │  - 5 calls per pipeline run      │   │
-│   │  - CRM notes     │              │  - 1 call per gate check         │   │
+│   │  - Lead data     │              │  - claude-opus-4-7 (memory +    │   │
+│   │  - Activities    │              │    action engine)               │   │
+│   │  - Email drafts  │              │  - claude-sonnet-4-6 (drafts,  │   │
+│   │  - CRM notes     │              │    stages 1/4/5)               │   │
 │   └────────┬─────────┘              └──────────────┬───────────────────┘   │
 │            │  REST API                             │  Python SDK           │
 └────────────│───────────────────────────────────────│─────────────────────-─┘
@@ -31,7 +41,17 @@ Between touchpoints, NextMove monitors the CRM for meaningful activity and pause
 │  ┌──────────────────────────────────────────────────────────────────────┐ │
 │  │  app.py  —  FastAPI web server                                       │ │
 │  │                                                                      │ │
-│  │  Routes:                                                             │ │
+│  │  Account intelligence routes:                                        │ │
+│  │    GET  /accounts              Account list                          │ │
+│  │    GET  /accounts/new          Add account form                      │ │
+│  │    POST /accounts/new          Init account (background)             │ │
+│  │    GET  /accounts/{id}         Account detail — memory + actions     │ │
+│  │    POST /accounts/{id}/actions/{aid}/approve  Approve → draft Close  │ │
+│  │    POST /accounts/{id}/actions/{aid}/reject   Reject action          │ │
+│  │    POST /accounts/{id}/refresh  Manual signal ingest + memory update │ │
+│  │    POST /accounts/{id}/run-fresh  Run 5-stage pipeline (stateless)   │ │
+│  │                                                                      │ │
+│  │  Legacy sequence routes:                                             │ │
 │  │    GET  /              Dashboard (all sequences)                     │ │
 │  │    GET  /sequence/new  New sequence form                             │ │
 │  │    POST /sequence/new  Start pipeline (background task)              │ │
@@ -40,35 +60,40 @@ Between touchpoints, NextMove monitors the CRM for meaningful activity and pause
 │  │    POST /sequence/{id}/reject/{tp}   Reject + cancel sequence        │ │
 │  │    POST /sequence/{id}/next          Generate next touchpoint        │ │
 │  │    GET  /commission    Commission dashboard                           │ │
-│  │    GET  /admin         Admin stats (direct URL only)                 │ │
-│  │    GET  /identity      Identity picker (cookie-based auth)           │ │
 │  └─────────┬───────────────────────┬────────────────────────────────┬──┘ │
 │            │                       │                                │    │
 │  ┌─────────▼──────┐   ┌────────────▼──────────┐   ┌───────────────▼──┐  │
 │  │   pipeline/    │   │    scheduler.py        │   │  templates/      │  │
 │  │                │   │                        │   │                  │  │
-│  │  crm.py        │   │  APScheduler           │   │  Jinja2 HTML     │  │
-│  │  website.py    │   │  Runs every 12 hours   │   │  served by       │  │
-│  │  stages.py     │   │  for active sequences: │   │  FastAPI         │  │
-│  │  gate.py       │   │  - gate classifier     │   │                  │  │
-│  │  close_write.py│   │  - demo detection      │   │  static/         │  │
-│  │                │   │  - commission events   │   │  style.css       │  │
-│  └─────────┬──────┘   └────────────┬──────────┘   └──────────────────┘  │
-│            │                       │                                      │
-│  ┌─────────▼───────────────────────▼───────────────────────────────────┐ │
-│  │   db.py  —  SQLite (nextmove.db)                                    │ │
-│  │                                                                     │ │
-│  │   users              identity (name + cookie, no passwords)         │ │
-│  │   sequences          one per lead — status, vertical, opp value     │ │
-│  │   touchpoints        each pipeline run — all 5 stage outputs stored │ │
-│  │   gate_verdicts      continue / warn_continue / pause + reason      │ │
-│  │   commission_events  demo detected → 10% of opp value               │ │
-│  └─────────────────────────────────────────────────────────────────────┘ │
-│                                                                            │
-│  ┌─────────────────────────────────────────────────────────────────────┐  │
-│  │   prompts/         Claude instructions for each stage               │  │
-│  │   strategies/      Challenger, Discovery, Mid-Market playbooks      │  │
-│  │   verticals/       Industry context + structured signals per sector │  │
+│  │  crm.py        │   │  process_accounts()    │   │  account.html    │  │
+│  │  website.py    │   │  every 1 hour:         │   │  accounts.html   │  │
+│  │  stages.py     │   │  - ingest signals      │   │  (+ legacy set)  │  │
+│  │  gate.py       │   │  - update memory       │   │                  │  │
+│  │  close_write.py│   │  - generate action     │   │  static/         │  │
+│  │                │   │                        │   │  style.css       │  │
+│  │  memory/       │   │  check_sequences()     │   │                  │  │
+│  │  updater.py    │   │  every 12 hours:       │   └──────────────────┘  │
+│  │                │   │  - gate classifier     │                         │
+│  │  actions/      │   │  - demo detection      │                         │
+│  │  engine.py     │   │  - commission events   │                         │
+│  │  drafter.py    │   └────────────────────────┘                         │
+│  │                │                                                       │
+│  │  signals/      │                                                       │
+│  │  ingestor.py   │                                                       │
+│  └─────────┬──────┘                                                       │
+│            │                                                               │
+│  ┌─────────▼───────────────────────────────────────────────────────────┐  │
+│  │   db.py  —  SQLite (nextmove.db)                                    │  │
+│  │                                                                     │  │
+│  │   users              identity (name + cookie, no passwords)         │  │
+│  │   accounts           one per tracked account — state, vertical      │  │
+│  │   account_memory     versioned memory documents (JSON)              │  │
+│  │   signals            raw activity from Close + synthetic signals    │  │
+│  │   actions            recommendations — source: memory | fresh       │  │
+│  │   sequences          legacy: one per lead                           │  │
+│  │   touchpoints        legacy: each pipeline run                      │  │
+│  │   gate_verdicts      legacy: continue / warn_continue / pause       │  │
+│  │   commission_events  demo detected → 10% of opp value               │  │
 │  └─────────────────────────────────────────────────────────────────────┘  │
 └────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -77,95 +102,174 @@ Between touchpoints, NextMove monitors the CRM for meaningful activity and pause
 
 ## Flow diagrams
 
-### 1. Starting a new sequence
+### 1. Adding a new account (account intelligence)
 
 ```
-AE opens /sequence/new
+Rep opens /accounts/new
           │
           ▼
-    Enter Close lead ID
+    Enter Close lead ID + vertical
           │
           ▼
-    POST /sequence/new
+    POST /accounts/new
           │
-          ├── DB: create sequence record (status = "generating")
-          │
-          ├── Redirect AE to /sequence/{id}  ← shows loading spinner
-          │
-          └── Background task starts:
+          ├── DB: create account record
+          ├── Redirect rep to /accounts/{id} (shows loading)
+          └── Background task _init_account():
                     │
                     ▼
               pipeline/crm.py
               ├── Fetch lead from Close API
               └── Scrape website (pipeline/website.py)
-                  ├── Detect booking software (Rezdy, Checkfront, etc.)
-                  ├── Detect OTA review links
-                  └── Detect "Book Now" CTA presence
                     │
                     ▼
-              pipeline/stages.py  (5 Claude API calls)
-              │
-              ├── Stage 1 — Assess
-              │   In:  lead data + website signals + vertical context
-              │   Out: company summary, signals, contacts, gaps
-              │
-              ├── Stage 2 — Strategy
-              │   In:  Stage 1 output
-              │   Out: priority, confidence, selected strategy
-              │         (Challenger / Discovery / Mid-Market)
-              │
-              ├── Stage 3 — Angle
-              │   In:  Stages 1–2 + strategy playbook
-              │   Out: one pain point, one angle, why now
-              │         (website mismatch used as talking point if strong)
-              │
-              ├── Stage 4 — Action
-              │   In:  Stages 1–3
-              │   Out: channel (email/call/voicemail/linkedin), contact
-              │
-              └── Stage 5 — Draft
-                  In:  Stages 1–4 + strategy playbook + rep context
-                  Out: ready-to-use outreach asset + rep notes
+              pipeline/stages.py — Stage 1 (Assess)
+              In: lead + website signals + vertical context
+              Out: company summary, signals, contacts, gaps
                     │
                     ▼
-              DB: store touchpoint (all 5 stage outputs as JSON)
-              DB: update sequence status → "pending"
+              memory/updater.py — init()
+              Builds initial memory document (Claude Opus)
                     │
                     ▼
-              Page auto-refreshes → AE sees Touchpoint 1 draft
+              actions/engine.py — determine()
+              Generates first action recommendation (Claude Opus)
+                    │
+                    ▼
+              DB: save memory + action
+              Page auto-refreshes → rep sees account detail
 ```
 
 ---
 
-### 2. Reviewing and approving a touchpoint
+### 2. Account detail page (side-by-side view)
 
 ```
-AE sees touchpoint draft on /sequence/{id}
+Rep opens /accounts/{id}
           │
-          ├── Reads: summary, strategy, angle, contact
-          ├── Reads: drafted email / call script / voicemail
-          ├── Reads: rep notes (sensitivities, objections, follow-up plan)
+          ├── Left column: Account Memory
+          │   pain points (with confidence), objections, engagement,
+          │   buying readiness, org intelligence, vertical signals,
+          │   action history, recent signals
           │
-          ├── Optionally edits the draft in the text area
+          ├── Middle column: Memory-based Recommendation
+          │   Current action from account memory
+          │   Approve + Draft  |  Reject
           │
-          └── Clicks "Approve & Create Draft in Close"
-                    │
-                    ▼
-              pipeline/close_write.py
-              │
-              ├── Email action    → POST /activity/email/ (status: draft)
-              ├── Call/voicemail  → POST /activity/note/ (labelled script)
-              └── LinkedIn        → POST /activity/note/ (labelled message)
-                    │
-                    ▼
-              DB: touchpoint status → "approved"
-              DB: sequence status   → "active"
-              DB: last_checked_at   → now (gate monitoring starts)
+          └── Right column: Fresh Pipeline
+              If not run: "Run Fresh Pipeline" button
+              If running: spinner + stage list + auto-refresh (6s)
+              If done: full 5-stage result independent of memory
+                       Use This + Draft  |  Dismiss
 ```
 
 ---
 
-### 3. Gate check (runs every 12 hours)
+### 3. Approving a memory-based action
+
+```
+Rep clicks "Approve + Draft"
+          │
+          ▼
+POST /accounts/{id}/actions/{aid}/approve
+          │
+          ├── DB: mark action as approved
+          │
+          ├── Background: _generate_and_log_draft()
+          │   memory/updater → action_drafter.generate()
+          │   → pipeline/close_write.py → Close API (email draft or note)
+          │
+          └── Background: _log_outreach_to_memory()
+              Directly updates engagement_history.last_contact_attempt
+              Increments total_touchpoints
+              Saves outreach_sent signal (no Claude call — direct DB update)
+```
+
+---
+
+### 4. Running fresh pipeline (stateless comparison)
+
+```
+Rep clicks "↺ Run"
+          │
+          ▼
+POST /accounts/{id}/run-fresh
+          │
+          ├── DB: accounts.fresh_running = 1
+          ├── Redirect → page shows spinner + auto-refresh
+          └── Background: _run_fresh_account()
+                    │
+                    ▼
+              pipeline/crm.py — fetch live lead from Close
+                    │
+                    ▼
+              pipeline/stages.py — all 5 stages (Claude Sonnet/Opus)
+              Stage 1 → Stage 2 → Stage 3 → Stage 4 → Stage 5
+                    │
+                    ▼
+              DB: create action with source='fresh'
+              DB: accounts.fresh_running = 0
+                    │
+                    ▼
+              Page auto-refreshes → purple card appears
+              Memory is NOT updated
+```
+
+---
+
+### 5. Hourly account intelligence loop
+
+```
+scheduler.py fires (every 1 hour)
+          │
+          ▼
+    For each account with state = 'active':
+          │
+          ▼
+    signals/ingestor.py
+    fetch_activities_since(lead_id, last_signal_at)
+    ├── Calls (with notes, truncated to 500 chars)
+    ├── Text notes (truncated to 500 chars)
+    └── Emails (subject + body, truncated to 1500 chars)
+          │
+          ▼
+    If new signals:
+          │
+          ▼
+    memory/updater.py — update()
+    Claude Opus merges signals into memory document
+    Applies confidence decay:
+    ├── 28 days unconfirmed → high becomes medium
+    └── 56 days unconfirmed → medium becomes low
+          │
+          ▼
+    actions/engine.py — determine()
+    New action recommendation from updated memory
+          │
+          ▼
+    DB: save new memory version + new action
+    DB: expire previous pending action
+```
+
+---
+
+### 6. Manual refresh (rep-triggered)
+
+```
+Rep clicks "Refresh Signals"
+          │
+          ▼
+POST /accounts/{id}/refresh
+          │
+          └── Same as hourly loop, PLUS:
+              pipeline/website.py — re-scrape company website
+              If booking software changed → save website_update signal
+              → included in this memory update
+```
+
+---
+
+### 7. Gate check — legacy sequences (runs every 12 hours)
 
 ```
 scheduler.py fires (every 12 hours)
@@ -174,59 +278,17 @@ scheduler.py fires (every 12 hours)
     For each sequence with status = "active":
           │
           ▼
-    pipeline/crm.py
-    fetch_activities_since(lead_id, last_checked_at)
-    ├── Calls since last check (with duration)
-    ├── Notes since last check
-    └── Emails since last check (non-draft)
+    pipeline/crm.py → fetch_activities_since(lead_id, last_checked_at)
           │
           ▼
-    pipeline/gate.py
-    Claude classifies the activity:
-    │
+    pipeline/gate.py — Claude classifies activity:
     ├── CONTINUE       No meaningful activity
-    │                  → DB: update last_checked_at
-    │
     ├── WARN_CONTINUE  Minor activity (short call, generic reply)
-    │                  → DB: save gate verdict
-    │                  → Sequence stays active
-    │                  → AE sees amber banner on next visit
-    │
-    └── PAUSE          Real conversation detected:
-                       call > 2.5 min OR pain points mentioned
-                       → DB: save gate verdict
-                       → DB: sequence status → "paused"
-                       → AE sees paused alert on dashboard
+    └── PAUSE          Real conversation detected
           │
           ▼
     Also checks: was a demo booked?
-    ├── No  → continue
     └── Yes → DB: commission_event (opp_value × 10%)
-                  Appears on /commission dashboard
-```
-
----
-
-### 4. Generating the next touchpoint (after gate clears)
-
-```
-Sequence is "active" (or AE overrides a "paused" sequence)
-          │
-          ▼
-AE clicks "Generate Touchpoint N"
-          │
-          ▼
-POST /sequence/{id}/next
-├── DB: sequence status → "generating"
-└── Background task: re-run full pipeline against current CRM state
-          │
-          ▼
-    Same as "Starting a new sequence" from Stage 1 onward
-    (lead is re-fetched fresh — CRM notes, calls, emails all updated)
-          │
-          ▼
-    New touchpoint stored, sequence → "pending"
-    AE reviews and approves again
 ```
 
 ---
@@ -237,31 +299,35 @@ POST /sequence/{id}/next
 |---|---|
 | `app.py` | FastAPI web server — all routes and request handling |
 | `db.py` | SQLite database — all reads and writes |
-| `scheduler.py` | APScheduler — gate checks every 12 hours |
-| `run.py` | CLI entrypoint — runs the pipeline without the web app |
-| `pipeline/crm.py` | Fetch and normalise a Close lead + fetch activities since a date |
-| `pipeline/website.py` | Scrape a company website for booking software signals |
-| `pipeline/stages.py` | The 5 stage functions — loads prompts, fills variables, calls Claude |
-| `pipeline/gate.py` | Gate classifier — Claude decides continue/warn/pause + demo detection |
-| `pipeline/close_write.py` | Write email drafts and CRM notes back to Close |
-| `pipeline/writer.py` | Write CLI output to output/*.json (CLI mode only) |
-| `prompts/system.md` | Shared Claude system prompt — role, constraints, output rules |
-| `prompts/01_assess.md` | Stage 1 — extract what we know from CRM and website |
-| `prompts/02_strategy.md` | Stage 2 — score lead and select strategy |
-| `prompts/03_angle.md` | Stage 3 — identify the single talking point and why now |
-| `prompts/04_action.md` | Stage 4 — select channel and contact |
-| `prompts/05_draft.md` | Stage 5 — write the actual outreach asset |
-| `prompts/gate.md` | Gate classifier prompt — rules for pause/warn/continue + demo detection |
-| `strategies/challenger.md` | Challenger playbook — reframe, create tension, control the process |
-| `strategies/discovery.md` | Discovery playbook — ask before claiming, low-confidence leads |
-| `strategies/mid_market.md` | Mid-Market playbook — ROI case, multi-stakeholder, proof points |
-| `verticals/tourism/context.md` | Tourism narrative — who operators are, how they buy, website signals |
-| `verticals/tourism/signals.json` | Tourism structured data — pain points, mismatches, competitor software |
-| `templates/` | Jinja2 HTML templates for the web UI |
+| `scheduler.py` | APScheduler — hourly account loop + 12hr gate checks |
+| `run.py` | CLI entrypoint — runs pipeline without web app |
+| `pipeline/crm.py` | Fetch and normalise a Close lead; fetch activities since a date |
+| `pipeline/website.py` | Scrape company website for booking software signals |
+| `pipeline/stages.py` | The 5 stage functions — mechanical runner |
+| `pipeline/gate.py` | Gate classifier for legacy sequences |
+| `pipeline/close_write.py` | Write email drafts and CRM notes to Close |
+| `pipeline/writer.py` | Write CLI output to output/*.json |
+| `memory/updater.py` | Init and update account memory documents (Claude Opus) |
+| `actions/engine.py` | Determine next-best-action from memory (Claude Opus) |
+| `actions/drafter.py` | Generate outreach draft from memory + action (Claude Sonnet) |
+| `signals/ingestor.py` | Poll Close for new activity, save as signals |
+| `prompts/system.md` | Shared Claude system prompt |
+| `prompts/01_assess.md` – `05_draft.md` | The 5 pipeline stage prompts |
+| `prompts/memory_init.md` | Initial memory document schema + instructions |
+| `prompts/memory_update.md` | Memory update rules, confidence decay (edit 28/56 thresholds here) |
+| `prompts/action_engine.md` | Next-best-action decision rules |
+| `prompts/gate.md` | Gate classifier prompt for legacy sequences |
+| `strategies/challenger.md` | Challenger sales playbook |
+| `strategies/discovery.md` | Discovery playbook |
+| `strategies/mid_market.md` | Mid-Market playbook |
+| `verticals/tourism/context.md` | Tourism narrative — buyer psychology, seasonality |
+| `verticals/tourism/signals.json` | Tourism structured data — pain points, competitor software |
+| `templates/` | Jinja2 HTML templates |
 | `static/style.css` | UI styles |
-| `nextmove.db` | SQLite database file (auto-created on first run, gitignored) |
-| `.env` | Secrets and config — never committed to git |
-| `.env.example` | Template with placeholder values — safe to share with teammates |
+| `MEMORY_GUIDE.md` | Plain English reference for the memory system |
+| `nextmove.db` | SQLite database file (auto-created, gitignored) |
+| `.env` | Secrets and config — never committed |
+| `.env.example` | Template with placeholder values |
 
 ---
 
@@ -275,7 +341,8 @@ POST /sequence/{id}/next
 | `REP_NAME` | Rep name used in call scripts and voicemails | Optional |
 | `REP_COMPANY` | Company name used in call scripts | Optional |
 | `REP_PHONE` | Phone number used in voicemails | Optional |
-| `NEXTMOVE_MODEL` | Claude model override (default: `claude-sonnet-4-6`) | Optional |
+| `NEXTMOVE_MODEL` | Claude model override for stages 1/4/5 (default: `claude-sonnet-4-6`) | Optional |
+| `NEXTMOVE_PLANNING_MODEL` | Model for stages 2/3 + memory/action (default: `claude-opus-4-7`) | Optional |
 
 ---
 
@@ -283,23 +350,23 @@ POST /sequence/{id}/next
 
 | If you want to change... | Edit this |
 |---|---|
-| What NextMove extracts from the CRM | `prompts/01_assess.md` |
+| What NextMove extracts from CRM | `prompts/01_assess.md` |
 | How leads are scored or strategy selected | `prompts/02_strategy.md` |
 | What talking point is chosen | `prompts/03_angle.md` |
 | Which channel or contact is picked | `prompts/04_action.md` |
-| The tone or format of drafted assets | `prompts/05_draft.md` |
-| The Challenger/Discovery/Mid-Market approach | `strategies/*.md` |
+| Tone or format of outreach drafts | `prompts/05_draft.md` |
+| How initial memory is built | `prompts/memory_init.md` |
+| How memory updates + confidence decay thresholds | `prompts/memory_update.md` (numbers 28 and 56) |
+| How next-best-action is reasoned | `prompts/action_engine.md` |
+| Challenger / Discovery / Mid-Market approach | `strategies/*.md` |
 | Industry knowledge, pain points, buyer psychology | `verticals/tourism/context.md` |
-| Structured signals, competitor software, deal sizes | `verticals/tourism/signals.json` |
-| What the gate considers meaningful | `prompts/gate.md` |
-| What booking software the scraper detects | `pipeline/website.py` |
-| How often the gate runs | `scheduler.py` |
-
-You never need to touch Python to change what NextMove produces. The intelligence lives in the prompts and vertical files.
+| Booking software the scraper detects | `pipeline/website.py` lines 15–41 |
+| What the gate considers meaningful (legacy) | `prompts/gate.md` |
+| How often the hourly loop runs | `scheduler.py` |
 
 ---
 
-## Sequence status reference
+## Sequence status reference (legacy)
 
 | Status | Meaning |
 |---|---|
@@ -315,7 +382,6 @@ You never need to touch Python to change what NextMove produces. The intelligenc
 ## Commission tracking
 
 - 10% of opportunity value is owed to the app owner on any demo booked from a lead run through NextMove
-- All users acknowledge this when starting a sequence (checkbox on the new sequence form)
-- Demos are detected automatically: the gate classifier checks every 12 hours for signals like "demo booked", "meeting scheduled", "send me a Calendly", etc. in call notes and CRM activity
-- Commission events appear on `/commission` — visible to all users
-- The admin view at `/admin` shows aggregate stats across all reps (direct URL only)
+- Demos are detected automatically by the gate classifier every 12 hours
+- Commission events appear on `/commission`
+- Admin view at `/admin` shows aggregate stats (direct URL only)

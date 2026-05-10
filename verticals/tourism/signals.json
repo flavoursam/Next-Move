@@ -1,5 +1,19 @@
 {
+  "_editing_guide": {
+    "purpose": "Structured signals for the tourism vertical. Used by Claude in Stage 1 and the memory system to interpret lead data correctly.",
+    "how_to_expand": {
+      "pain_points": "Add any pain point a prospect has mentioned or that comes up repeatedly in calls. Be specific — 'high OTA commission' is better than 'cost issues'.",
+      "positive_signals": "Things you see in a lead that indicate genuine opportunity. CRM signals, website signals, TripAdvisor signals, deal history.",
+      "negative_signals": "Things that indicate low fit, bad timing, or a lead to deprioritise. Be honest — this helps Claude stop wasting your time on dead ends.",
+      "website_mismatches": "Patterns you see when someone's website doesn't match their stated booking setup. Each one should include what it means and how to use it in conversation.",
+      "competitor_software": "Any booking software you see in the wild. Add new ones as you encounter them.",
+      "buying_triggers": "Events or realisations that tend to move a prospect from cold to interested. These feed the 'why now' framing.",
+      "objection_responses": "Objections you hear and what works to reframe them. Claude uses these to shape the angle and draft."
+    }
+  },
+
   "vertical": "tourism",
+
   "pain_points": [
     "high OTA commission dependency (20-30% per booking)",
     "low direct booking rate despite strong TripAdvisor presence",
@@ -11,8 +25,16 @@
     "peak season capacity not being captured in advance",
     "seasonal cash flow pressure",
     "outdated or underperforming booking software",
-    "competitor booking software that lacks international distribution"
+    "competitor booking software that lacks international distribution",
+    "no channel manager — managing inventory separately across platforms",
+    "double-booking risk from manual or split inventory management",
+    "no visibility on where bookings are coming from (OTA vs direct vs walk-in)",
+    "losing bookings to competitor operators who have slicker direct booking flows",
+    "guest communication is entirely manual (confirmation emails, reminders)",
+    "no upsell or add-on capability in their current booking flow",
+    "relying on phone bookings from international travellers across time zones"
   ],
+
   "positive_signals": [
     "high TripAdvisor rating (4.5+)",
     "high TripAdvisor review count (200+)",
@@ -24,8 +46,17 @@
     "recent ownership change",
     "new tour or product launch",
     "Book Now CTA present — intent to take online bookings, even if system is missing or broken",
-    "competitor software detected on site — confirms they are open to using booking technology"
+    "competitor software detected on site — confirms they are open to using booking technology",
+    "active on social media with high engagement — marketing-minded operator",
+    "multiple tours or products — complexity that benefits from a proper system",
+    "international-facing website (multi-currency, multiple languages) — high-value international bookers",
+    "listed on multiple OTAs — already managing multi-channel, would benefit from centralised inventory",
+    "Viator or GetYourGuide as primary channel — commission leakage is quantifiable and real",
+    "email address for owner or GM available in CRM",
+    "phone number available and not DNC flagged",
+    "recent rebrand or new website — they're investing in their business"
   ],
+
   "negative_signals": [
     "business listed as for sale or being sold",
     "DNC flag on key contacts",
@@ -33,8 +64,13 @@
     "Ticketek or similar locked contract",
     "90%+ walk-in business with no online presence",
     "bouncing email for primary contact",
-    "no activity in CRM for 6+ months with no context"
+    "no activity in CRM for 6+ months with no context",
+    "operator has explicitly said they don't want to change systems",
+    "business closed or seasonal with no reopening date confirmed",
+    "no identifiable decision maker in CRM",
+    "previous lost deal marked as 'not a fit' with no new trigger since"
   ],
+
   "website_mismatches": [
     {
       "signal": "Book Now CTA with no booking system detectable",
@@ -60,8 +96,55 @@
       "signal": "CRM records one software, website shows different software",
       "what_it_means": "CRM data may be stale, or they have switched systems. Worth clarifying before making assumptions.",
       "how_to_use": "Note as a gap. Do not lead with it — use it to ask a clarifying question if the conversation opens."
+    },
+    {
+      "signal": "Website appears unmaintained or very outdated",
+      "what_it_means": "May indicate a less tech-savvy operator. Could be an easy win if they have no system, or a harder sell if they see no value in online presence.",
+      "how_to_use": "Don't lead with this. Check their TripAdvisor and CRM activity — volume there may offset the weak web presence."
     }
   ],
+
+  "buying_triggers": [
+    "seeing their OTA commission total for the season and doing the maths on what direct would have meant",
+    "a competitor switching to FareHarbor and visibly improving their direct booking flow",
+    "peak season sellout via OTAs with realisation that direct margin was left on the table",
+    "new ownership — fresh eyes, no attachment to existing setup",
+    "bad experience with current software (downtime, poor support, missed bookings)",
+    "new product launch or rebrand where they're rebuilding the website anyway",
+    "an international group booking that was hard to process without a proper system",
+    "someone asking them at a tourism conference who they use for bookings",
+    "a bad peak season where bookings were lower than expected and they're looking for what to change",
+    "contract expiry on current software"
+  ],
+
+  "objection_responses": [
+    {
+      "objection": "We're too busy right now",
+      "what_it_means": "Timing issue, not a no. Respect it.",
+      "reframe": "Completely understand — when does your season wind down? I'd love to circle back in [April/May] when you have more headspace. Would that work?"
+    },
+    {
+      "objection": "We're happy with Rezdy / Checkfront",
+      "what_it_means": "They haven't felt enough pain to change. They haven't been shown what's possible.",
+      "reframe": "That's great — how are you finding the direct booking share vs OTA volume? Most operators we talk to are running 60-70% OTA. Are you seeing something similar?"
+    },
+    {
+      "objection": "We tried a different system before and it didn't work",
+      "what_it_means": "Past bad experience. Find out what went wrong specifically.",
+      "reframe": "Sorry to hear that — what happened? Understanding what didn't work helps me be honest about whether this would actually be different for you."
+    },
+    {
+      "objection": "It's too expensive",
+      "what_it_means": "Either they don't understand the model, or the value hasn't landed yet.",
+      "reframe": "I get that. The way FareHarbor works, there's no monthly fee — you pay per booking. So the question is really whether the direct bookings you gain outweigh that cost. Can we look at what your current OTA commission is running at?"
+    },
+    {
+      "objection": "We mostly do walk-ins, we don't need online bookings",
+      "what_it_means": "May be true. Worth validating rather than pushing.",
+      "reframe": "That makes sense for some operators. What percentage of your bookings would you say are walk-in vs pre-booked? I ask because even at 30% pre-booked, the international visitor piece can add up."
+    }
+  ],
+
   "competitor_software": [
     "Rezdy",
     "Checkfront",
@@ -70,8 +153,12 @@
     "TrekkSoft",
     "Bokun",
     "Regiondo",
-    "Xola"
+    "Xola",
+    "Beyonk",
+    "Ticket Tailor",
+    "Acteamo"
   ],
+
   "ota_platforms": [
     "Viator",
     "GetYourGuide",
@@ -79,22 +166,29 @@
     "TripAdvisor Experiences",
     "Booking.com Experiences",
     "Klook",
-    "Airbnb Experiences"
+    "Airbnb Experiences",
+    "Musement"
   ],
+
   "decision_maker_titles": [
     "Owner",
     "Co-Owner",
     "Director",
+    "Managing Director",
     "General Manager",
     "Operations Manager",
     "Marketing Manager",
-    "Reservations Manager"
+    "Reservations Manager",
+    "Tourism Manager",
+    "Business Development Manager"
   ],
+
   "typical_deal_sizes_usd": {
     "small": "under 5000",
     "mid": "5000 to 20000",
     "large": "over 20000"
   },
+
   "best_outreach_months": ["April", "May", "June", "July", "August"],
   "avoid_outreach_months": ["November", "December", "January", "February"]
 }

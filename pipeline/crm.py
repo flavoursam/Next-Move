@@ -289,7 +289,7 @@ def fetch_activities_since(lead_id: str, since_iso: str) -> list[dict]:
                 "type": "email",
                 "date": (e.get("date_created") or "")[:10],
                 "duration_seconds": None,
-                "note": f"Subject: {e.get('subject', '')} | {(e.get('body_text') or '')[:300]}",
+                "note": f"Subject: {e.get('subject', '')} | {(e.get('body_text') or '')[:1500]}",
                 "direction": e.get("direction"),
             })
 

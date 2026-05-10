@@ -1,5 +1,66 @@
 {% extends "base.html" %}
 {% block title %}{{ account.company_name }} — NextMove{% endblock %}
+
+{% block extra_head %}
+<style>
+  .main { max-width: 1200px; }
+
+  .compare-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    align-items: start;
+    margin-bottom: 24px;
+  }
+  .compare-col { display: flex; flex-direction: column; }
+  .compare-header {
+    padding: 10px 16px 8px;
+    border-radius: 8px 8px 0 0;
+    border: 1px solid var(--border);
+    border-bottom: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 40px;
+  }
+  .compare-header-memory { background: #eef2ff; border-color: var(--accent); }
+  .compare-header-fresh  { background: #faf5ff; border-color: #8b5cf6; }
+  .compare-body {
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    background: var(--surface);
+    padding: 16px;
+    flex: 1;
+  }
+  .compare-body-memory { border-color: var(--accent); }
+  .compare-body-fresh  { border-color: #8b5cf6; }
+  .fresh-empty {
+    background: #faf5ff;
+    border: 1px solid #8b5cf6;
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    padding: 40px 24px;
+    text-align: center;
+    color: #7c3aed;
+  }
+  .fresh-loading {
+    background: #faf5ff;
+    border: 1px solid #8b5cf6;
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    padding: 40px 24px;
+    text-align: center;
+  }
+  .stage-list { list-style: none; text-align: left; display: inline-block; margin-top: 8px; }
+  .stage-list li { font-size: 11px; color: #7c3aed; padding: 1px 0; }
+  .stage-list li::before { content: "→ "; opacity: 0.4; }
+</style>
+{% if account.fresh_running %}
+<meta http-equiv="refresh" content="6">
+{% endif %}
+{% endblock %}
+
 {% block content %}
 
 <div class="breadcrumb">
@@ -8,7 +69,7 @@
   <span>{{ account.company_name }}</span>
 </div>
 
-<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
   <div>
     <h1 class="page-title" style="margin-bottom: 4px;">{{ account.company_name }}</h1>
     <div class="meta">
@@ -19,9 +80,11 @@
       {% endif %}
     </div>
   </div>
-  <form method="post" action="/accounts/{{ account.id }}/refresh">
-    <button type="submit" class="btn btn-secondary">Refresh Signals</button>
-  </form>
+  <div style="display: flex; gap: 8px;">
+    <form method="post" action="/accounts/{{ account.id }}/refresh">
+      <button type="submit" class="btn btn-secondary">Refresh Signals</button>
+    </form>
+  </div>
 </div>
 
 {% if account.state == 'error' %}
@@ -36,12 +99,178 @@
 </div>
 {% else %}
 
-<div style="display: grid; grid-template-columns: 1fr 340px; gap: 20px; align-items: start;">
+<!-- ── Section 1: Draft Comparison ──────────────────────────── -->
+{% set display_action = pending_action or (action_history | selectattr('source', 'equalto', 'memory') | selectattr('draft') | first) %}
+<p class="section-title" style="margin-bottom: 12px;">Recommended Actions</p>
+<div class="compare-grid">
 
-  <!-- Left: Account Memory -->
+  <!-- LEFT: Memory-based -->
+  <div class="compare-col">
+    <div class="compare-header compare-header-memory">
+      <div>
+        <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent);">Memory-based</span>
+        <span style="font-size: 11px; color: var(--muted); margin-left: 6px;">v{{ memory.memory_version }} · {{ memory.last_updated }}</span>
+      </div>
+    </div>
+
+    {% if display_action %}
+    <div class="compare-body compare-body-memory">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+        {% if display_action.priority %}<span class="badge badge-{{ display_action.priority }}">{{ display_action.priority }}</span>{% endif %}
+        <strong style="font-size: 14px;">{{ display_action.type | replace("_", " ") | title }}</strong>
+        {% if display_action.status != 'pending' %}
+        <span class="badge badge-{{ display_action.status }}" style="margin-left: auto;">{{ display_action.status }}</span>
+        {% endif %}
+      </div>
+
+      {% set payload = display_action.payload %}
+      <div style="font-size: 12px; color: var(--muted); margin-bottom: 14px; min-height: 18px;">
+        {% if payload.contact_name %}<strong>{{ payload.contact_name }}</strong>{% if payload.contact_email %} · {{ payload.contact_email }}{% endif %}{% if payload.contact_phone %} · {{ payload.contact_phone }}{% endif %}{% else %}No contact selected{% endif %}
+      </div>
+
+      {% if display_action.draft %}
+      {% set md = display_action.draft %}
+      <div style="border-top: 1px solid var(--border); padding-top: 14px; margin-bottom: 14px;">
+        {% if md.email %}
+        <p class="draft-label" style="color: var(--accent);">Email Draft</p>
+        <p class="draft-subject">{{ md.email.subject }}</p>
+        <div class="draft-box" style="font-size: 13px;">{{ md.email.body }}</div>
+        {% elif md.call %}
+        <p class="draft-label" style="color: var(--accent);">{% if display_action.type == 'voicemail' %}Voicemail Script{% else %}Call Script{% endif %}</p>
+        <div class="draft-box" style="font-size: 13px;">{{ md.call.script or md.call.voicemail }}</div>
+        {% endif %}
+      </div>
+      {% else %}
+      <div style="border-top: 1px solid var(--border); padding: 16px 0; color: var(--muted); font-size: 12px; margin-bottom: 14px; line-height: 1.6;">
+        No new signals since the last outreach — the recommendation above still stands. Hit <strong>↺ Run</strong> on the right to generate a fresh draft for comparison.
+      </div>
+      {% endif %}
+
+      <p style="font-size: 12px; color: var(--muted); line-height: 1.55; margin-bottom: 14px; border-top: 1px solid var(--border); padding-top: 10px;">{{ display_action.reasoning }}</p>
+
+      {% if display_action.status == 'pending' %}
+      <div style="display: flex; gap: 8px;">
+        <form method="post" action="/accounts/{{ account.id }}/actions/{{ display_action.id }}/approve">
+          <button type="submit" class="btn btn-success">
+            {% if display_action.type in ['send_email', 'call', 'voicemail'] %}Approve + Send to Close{% else %}Approve{% endif %}
+          </button>
+        </form>
+        <form method="post" action="/accounts/{{ account.id }}/actions/{{ display_action.id }}/reject">
+          <button type="submit" class="btn btn-secondary">Reject</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+
+    {% else %}
+    <div class="compare-body compare-body-memory" style="text-align: center; padding: 40px 24px; color: var(--muted);">
+      <p style="margin-bottom: 12px;">No pending action.</p>
+      <form method="post" action="/accounts/{{ account.id }}/refresh">
+        <button type="submit" class="btn btn-secondary">Check for Updates</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- RIGHT: Fresh Pipeline -->
+  <div class="compare-col">
+    <div class="compare-header compare-header-fresh">
+      <div>
+        <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #7c3aed;">Fresh Pipeline</span>
+        <span style="font-size: 11px; color: #a78bfa; margin-left: 6px;">live CRM · ignores memory</span>
+      </div>
+      {% if account.fresh_running %}
+      <span style="font-size: 11px; color: #7c3aed;"><span class="spinner" style="width: 12px; height: 12px; border-width: 2px; border-color: #e9d5ff; border-top-color: #8b5cf6; margin-right: 4px; vertical-align: middle;"></span>Running...</span>
+      {% elif not fresh_action %}
+      <form method="post" action="/accounts/{{ account.id }}/run-fresh">
+        <button type="submit" class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px; border-color: #d8b4fe; color: #7c3aed;">↺ Run</button>
+      </form>
+      {% else %}
+      <form method="post" action="/accounts/{{ account.id }}/run-fresh">
+        <button type="submit" class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px; border-color: #d8b4fe; color: #7c3aed;">↺ Re-run</button>
+      </form>
+      {% endif %}
+    </div>
+
+    {% if account.fresh_running %}
+    <div class="fresh-loading">
+      <div class="spinner" style="width: 28px; height: 28px; border-color: #e9d5ff; border-top-color: #8b5cf6; margin-bottom: 12px;"></div>
+      <p style="font-size: 13px; font-weight: 600; color: #6d28d9; margin-bottom: 4px;">Running fresh analysis</p>
+      <p style="font-size: 12px; color: #7c3aed; margin-bottom: 8px;">Reading live Close data, running all 5 stages. ~30–60 seconds.</p>
+      <ul class="stage-list">
+        <li>Stage 1 — Read CRM + scrape website</li>
+        <li>Stage 2 — Select strategy</li>
+        <li>Stage 3 — Identify angle</li>
+        <li>Stage 4 — Choose channel + contact</li>
+        <li>Stage 5 — Draft outreach</li>
+      </ul>
+      <p style="font-size: 11px; color: #a78bfa; margin-top: 10px;">Auto-refreshes every 6 seconds.</p>
+    </div>
+
+    {% elif fresh_action %}
+    <div class="compare-body compare-body-fresh">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+        <strong style="font-size: 14px;">{{ fresh_action.type | replace("_", " ") | title }}</strong>
+        {% set fp = fresh_action.payload %}
+        {% if fp.strategy_result and fp.strategy_result.selected_strategy %}
+        <span class="meta" style="font-size: 11px;">{{ fp.strategy_result.selected_strategy | replace("_", " ") }}</span>
+        {% endif %}
+      </div>
+
+      {% set fp = fresh_action.payload %}
+      <div style="font-size: 12px; color: var(--muted); margin-bottom: 14px; min-height: 18px;">
+        {% if fp.contact_name %}<strong>{{ fp.contact_name }}</strong>{% if fp.contact_email %} · {{ fp.contact_email }}{% endif %}{% if fp.contact_phone %} · {{ fp.contact_phone }}{% endif %}{% else %}No contact selected{% endif %}
+      </div>
+
+      {% if fp.draft %}
+      {% set fd = fp.draft %}
+      <div style="border-top: 1px solid var(--border); padding-top: 14px; margin-bottom: 14px;">
+        {% if fd.email %}
+        <p class="draft-label" style="color: #8b5cf6;">Email Draft</p>
+        <p class="draft-subject">{{ fd.email.subject }}</p>
+        <div class="draft-box" style="font-size: 13px; background: #faf5ff; border-color: #e9d5ff;">{{ fd.email.body }}</div>
+        {% elif fd.call %}
+        <p class="draft-label" style="color: #8b5cf6;">{% if fresh_action.type == 'voicemail' %}Voicemail Script{% else %}Call Script{% endif %}</p>
+        <div class="draft-box" style="font-size: 13px; background: #faf5ff; border-color: #e9d5ff;">{{ fd.call.script or fd.call.voicemail }}</div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <p style="font-size: 12px; color: var(--muted); line-height: 1.55; margin-bottom: 14px; border-top: 1px solid var(--border); padding-top: 10px;">
+        {% if fp.angle_result %}{{ fp.angle_result.why_now or fresh_action.reasoning }}{% else %}{{ fresh_action.reasoning }}{% endif %}
+      </p>
+
+      <div style="display: flex; gap: 8px;">
+        <form method="post" action="/accounts/{{ account.id }}/actions/{{ fresh_action.id }}/approve">
+          <button type="submit" class="btn btn-success" style="background: #7c3aed;">
+            {% if fresh_action.type in ['send_email', 'call', 'voicemail'] %}Use This + Send to Close{% else %}Use This{% endif %}
+          </button>
+        </form>
+        <form method="post" action="/accounts/{{ account.id }}/actions/{{ fresh_action.id }}/reject">
+          <button type="submit" class="btn btn-secondary" style="border-color: #e9d5ff; color: #7c3aed;">Dismiss</button>
+        </form>
+      </div>
+    </div>
+
+    {% else %}
+    <div class="fresh-empty">
+      <p style="margin-bottom: 12px; font-size: 13px; opacity: 0.8;">Run the fresh pipeline to see an independent recommendation alongside the memory-based one.</p>
+      <form method="post" action="/accounts/{{ account.id }}/run-fresh">
+        <button type="submit" class="btn" style="background: #ede9fe; color: #6d28d9; border: 1px solid #ddd6fe;">↺ Run Fresh Pipeline</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+
+<!-- ── Section 2: Account Memory ────────────────────────────── -->
+<p class="section-title" style="margin-top: 32px;">Account Memory <span style="font-weight: 400; text-transform: none; font-size: 11px; color: var(--muted);">v{{ memory.memory_version }} · updated {{ memory.last_updated }}</span></p>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 28px;">
+
   <div>
-    <p class="section-title">Account Memory <span style="font-weight:400; text-transform:none; color: var(--muted); font-size: 11px;">v{{ memory.memory_version }} · updated {{ memory.last_updated }}</span></p>
-
     <div class="card" style="margin-bottom: 12px;">
       <p style="font-size: 14px; line-height: 1.7;">{{ memory.summary }}</p>
     </div>
@@ -51,10 +280,7 @@
       <p class="section-title">Pain Points</p>
       <ul class="signal-list">
         {% for p in memory.pain_points %}
-        <li>
-          {{ p.point }}
-          <span class="meta" style="margin-left: 6px;">{{ p.confidence }}</span>
-        </li>
+        <li>{{ p.point }} <span class="meta" style="margin-left: 6px;">{{ p.confidence }} · last confirmed {{ p.last_confirmed or "unknown" }}</span></li>
         {% endfor %}
       </ul>
     </div>
@@ -65,55 +291,9 @@
       <p class="section-title">Objections on Record</p>
       <ul class="signal-list">
         {% for o in memory.objections %}
-        <li>
-          {{ o.objection }}
-          {% if o.notes %}<span class="meta" style="margin-left: 6px;">{{ o.notes }}</span>{% endif %}
-        </li>
+        <li>{{ o.objection }}{% if o.notes %} <span class="meta" style="margin-left: 6px;">{{ o.notes }}</span>{% endif %}</li>
         {% endfor %}
       </ul>
-    </div>
-    {% endif %}
-
-    <div class="card" style="margin-bottom: 12px;">
-      <p class="section-title">Engagement</p>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 13px;">
-        <div><span class="meta">Last contact</span><br>{{ memory.engagement_history.last_contact_attempt or "—" }}</div>
-        <div><span class="meta">Last response</span><br>{{ memory.engagement_history.last_response or "—" }}</div>
-        <div><span class="meta">Response rate</span><br>{{ memory.engagement_history.response_rate | replace("_", " ") }}</div>
-        <div><span class="meta">Preferred channel</span><br>{{ memory.engagement_history.preferred_channel }}</div>
-      </div>
-    </div>
-
-    {% if memory.buying_readiness %}
-    <div class="card" style="margin-bottom: 12px;">
-      <p class="section-title">Buying Readiness</p>
-      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 10px;">
-        <span style="font-size: 22px; font-weight: 700;">{{ (memory.buying_readiness.score * 100) | int }}%</span>
-        <span class="badge badge-{{ memory.buying_readiness.level }}">{{ memory.buying_readiness.level | replace("_", " ") }}</span>
-      </div>
-      {% if memory.buying_readiness.timing_notes %}
-      <p class="meta">{{ memory.buying_readiness.timing_notes }}</p>
-      {% endif %}
-      {% if memory.buying_readiness.signals_for %}
-      <div style="margin-top: 10px;">
-        <p class="section-title" style="margin-bottom: 4px;">Signals for</p>
-        <ul class="signal-list">
-          {% for s in memory.buying_readiness.signals_for %}
-          <li>{{ s }}</li>
-          {% endfor %}
-        </ul>
-      </div>
-      {% endif %}
-      {% if memory.buying_readiness.signals_against %}
-      <div style="margin-top: 10px;">
-        <p class="section-title" style="margin-bottom: 4px; color: var(--danger);">Signals against</p>
-        <ul class="signal-list" style="--accent: var(--danger);">
-          {% for s in memory.buying_readiness.signals_against %}
-          <li>{{ s }}</li>
-          {% endfor %}
-        </ul>
-      </div>
-      {% endif %}
     </div>
     {% endif %}
 
@@ -124,7 +304,7 @@
       {% if org.decision_maker_name %}
       <div style="font-size: 13px; margin-bottom: 6px;">
         <strong>{{ org.decision_maker_name }}</strong>
-        {% if org.decision_maker_title %}<span class="meta">· {{ org.decision_maker_title }}</span>{% endif %}
+        {% if org.decision_maker_title %}<span class="meta"> · {{ org.decision_maker_title }}</span>{% endif %}
       </div>
       <div class="meta">
         {% if org.decision_maker_email %}<span>{{ org.decision_maker_email }}</span>{% endif %}
@@ -132,6 +312,42 @@
       </div>
       {% else %}
       <p class="meta">No decision maker identified yet.</p>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+  <div>
+    <div class="card" style="margin-bottom: 12px;">
+      <p class="section-title">Engagement</p>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 13px;">
+        <div><span class="meta">Last contact</span><br>{{ memory.engagement_history.last_contact_attempt or "—" }}</div>
+        <div><span class="meta">Last response</span><br>{{ memory.engagement_history.last_response or "—" }}</div>
+        <div><span class="meta">Response rate</span><br>{{ memory.engagement_history.response_rate | replace("_", " ") }}</div>
+        <div><span class="meta">Preferred channel</span><br>{{ memory.engagement_history.preferred_channel }}</div>
+        <div><span class="meta">Touchpoints</span><br>{{ memory.engagement_history.total_touchpoints }}</div>
+      </div>
+    </div>
+
+    {% if memory.buying_readiness %}
+    <div class="card" style="margin-bottom: 12px;">
+      <p class="section-title">Buying Readiness</p>
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 10px;">
+        <span style="font-size: 22px; font-weight: 700;">{{ (memory.buying_readiness.score * 100) | int }}%</span>
+        <span class="badge badge-{{ memory.buying_readiness.level }}">{{ memory.buying_readiness.level | replace("_", " ") }}</span>
+      </div>
+      {% if memory.buying_readiness.timing_notes %}<p class="meta">{{ memory.buying_readiness.timing_notes }}</p>{% endif %}
+      {% if memory.buying_readiness.signals_for %}
+      <div style="margin-top: 8px;">
+        <p class="section-title" style="margin-bottom: 4px;">For</p>
+        <ul class="signal-list">{% for s in memory.buying_readiness.signals_for %}<li>{{ s }}</li>{% endfor %}</ul>
+      </div>
+      {% endif %}
+      {% if memory.buying_readiness.signals_against %}
+      <div style="margin-top: 8px;">
+        <p class="section-title" style="margin-bottom: 4px; color: var(--danger);">Against</p>
+        <ul class="signal-list" style="--accent: var(--danger);">{% for s in memory.buying_readiness.signals_against %}<li>{{ s }}</li>{% endfor %}</ul>
+      </div>
       {% endif %}
     </div>
     {% endif %}
@@ -143,123 +359,67 @@
       <p style="font-size: 13px; color: var(--muted); margin-bottom: 8px;">{{ memory.vertical_signals.seasonality_notes }}</p>
       {% endif %}
       {% if memory.vertical_signals.operational_pressures %}
-      <ul class="signal-list">
-        {% for p in memory.vertical_signals.operational_pressures %}
-        <li>{{ p }}</li>
-        {% endfor %}
-      </ul>
+      <ul class="signal-list">{% for p in memory.vertical_signals.operational_pressures %}<li>{{ p }}</li>{% endfor %}</ul>
       {% endif %}
     </div>
     {% endif %}
-
   </div>
 
-  <!-- Right: Next Best Action -->
+</div>
+
+
+<!-- ── Section 3: Action History + Signals ──────────────────── -->
+{% if action_history or signals %}
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px;">
+
+  {% if action_history %}
   <div>
-    <p class="section-title">Next Best Action</p>
-
-    {% if pending_action %}
-    <div class="card" style="border-left: 3px solid var(--accent); margin-bottom: 12px;">
-      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
-        <span class="badge badge-{{ pending_action.priority }}">{{ pending_action.priority }}</span>
-        <strong style="font-size: 15px;">{{ pending_action.type | replace("_", " ") | title }}</strong>
-      </div>
-      <p style="font-size: 13px; line-height: 1.65; margin-bottom: 12px;">{{ pending_action.reasoning }}</p>
-
-      {% set payload = pending_action.payload %}
-      {% if payload.brief %}
-      <div style="background: var(--bg); border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; font-size: 12px; color: var(--muted); line-height: 1.6;">
-        <strong style="display: block; margin-bottom: 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;">Brief</strong>
-        {{ payload.brief }}
-      </div>
-      {% endif %}
-
-      {% if payload.contact_name %}
-      <div class="meta" style="margin-bottom: 12px;">
-        <span>Contact: <strong>{{ payload.contact_name }}</strong></span>
-        {% if payload.contact_email %}<span>{{ payload.contact_email }}</span>{% endif %}
-        {% if payload.contact_phone %}<span>{{ payload.contact_phone }}</span>{% endif %}
-      </div>
-      {% endif %}
-
-      <div class="action-bar">
-        <form method="post" action="/accounts/{{ account.id }}/actions/{{ pending_action.id }}/approve">
-          <button type="submit" class="btn btn-success">
-            {% if pending_action.type in ['send_email', 'call', 'voicemail'] %}
-              Approve + Draft
-            {% else %}
-              Approve
-            {% endif %}
-          </button>
-        </form>
-        <form method="post" action="/accounts/{{ account.id }}/actions/{{ pending_action.id }}/reject">
-          <button type="submit" class="btn btn-secondary">Reject</button>
-        </form>
-      </div>
-    </div>
-    {% else %}
-    <div class="card" style="text-align: center; padding: 24px; color: var(--muted);">
-      <p>No pending action.</p>
-      <form method="post" action="/accounts/{{ account.id }}/refresh" style="margin-top: 12px;">
-        <button type="submit" class="btn btn-secondary">Check for Updates</button>
-      </form>
-    </div>
-    {% endif %}
-
-    <!-- Action History -->
-    {% if action_history %}
-    <p class="section-title" style="margin-top: 20px;">Action History</p>
+    <p class="section-title">Action History</p>
     {% for a in action_history %}
-    {% if a.status != 'pending' %}
-    <div class="card" style="margin-bottom: 8px; padding: 12px 16px; opacity: {{ '1' if a.status == 'approved' else '0.65' }};">
+    {% if a.status not in ['pending', 'expired'] and a.source == 'memory' %}
+    <div class="card" style="margin-bottom: 8px; padding: 12px 16px; opacity: {{ '1' if a.status == 'approved' else '0.6' }};">
       <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
         <span class="badge badge-{{ a.status }}">{{ a.status }}</span>
         <span style="font-size: 13px; font-weight: 500;">{{ a.type | replace("_", " ") | title }}</span>
+        <span class="meta" style="margin-left: auto;">{{ a.created_at[:10] }}</span>
       </div>
-      <p style="font-size: 12px; color: var(--muted); line-height: 1.5;">{{ a.reasoning[:120] }}{% if a.reasoning | length > 120 %}...{% endif %}</p>
-      <p class="meta" style="margin-top: 4px;">{{ a.created_at[:10] }}</p>
-
+      <p style="font-size: 12px; color: var(--muted); line-height: 1.5;">{{ a.reasoning[:100] }}{% if a.reasoning | length > 100 %}...{% endif %}</p>
       {% if a.status == 'approved' and a.draft %}
         {% set draft = a.draft %}
         {% if draft.email %}
-        <div style="margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px;">
-          <p class="draft-label">Email Draft</p>
-          <p class="draft-subject">{{ draft.email.subject }}</p>
-          <div class="draft-box" style="font-size: 12px; min-height: unset;">{{ draft.email.body }}</div>
-        </div>
-        {% elif draft.call %}
-        <div style="margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px;">
-          <p class="draft-label">Call Script</p>
-          <div class="draft-box" style="font-size: 12px; min-height: unset;">{{ draft.call.script or draft.call.voicemail }}</div>
+        <div style="margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px;">
+          <p class="draft-label">{{ draft.email.subject }}</p>
+          <div class="draft-box" style="font-size: 11px; min-height: unset;">{{ draft.email.body }}</div>
         </div>
         {% endif %}
       {% endif %}
     </div>
     {% endif %}
     {% endfor %}
-    {% endif %}
+  </div>
+  {% endif %}
 
-    <!-- Recent Signals -->
-    {% if signals %}
-    <p class="section-title" style="margin-top: 20px;">Recent Signals</p>
+  {% if signals %}
+  <div>
+    <p class="section-title">Recent Signals</p>
     <div class="card" style="padding: 0; overflow: hidden;">
-      {% for sig in signals[:8] %}
+      {% for sig in signals[:10] %}
       <div style="padding: 10px 16px; border-bottom: 1px solid var(--border); font-size: 12px; {% if loop.last %}border-bottom: none;{% endif %}">
         <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
           <span class="badge" style="font-size: 10px; background: var(--bg); color: var(--muted); border: 1px solid var(--border);">{{ sig.type }}</span>
           <span class="meta">{{ sig.content.date or sig.ingested_at[:10] }}</span>
         </div>
         {% if sig.content.note %}
-        <p style="color: var(--muted); line-height: 1.5; margin-top: 4px;">{{ sig.content.note[:120] }}{% if sig.content.note | length > 120 %}...{% endif %}</p>
+        <p style="color: var(--muted); line-height: 1.5; margin-top: 4px;">{{ sig.content.note[:140] }}{% if sig.content.note | length > 140 %}...{% endif %}</p>
         {% endif %}
       </div>
       {% endfor %}
     </div>
-    {% endif %}
-
   </div>
-</div>
+  {% endif %}
 
+</div>
 {% endif %}
 
+{% endif %}
 {% endblock %}

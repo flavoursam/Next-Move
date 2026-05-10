@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}NextMove{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css">
+  {% block extra_head %}{% endblock %}
 </head>
 <body>
   <nav class="nav">
@@ -12,8 +13,7 @@
     <div class="nav-links">
       <a href="/accounts">Accounts</a>
       <a href="/">Sequences</a>
-      <a href="/commission">Commission</a>
-      <a href="/accounts/new" class="btn btn-cta">+ Track Account</a>
+<a href="/accounts/new" class="btn btn-cta">+ Track Account</a>
     </div>
     {% if user %}
     <div class="nav-user">{{ user.name }}</div>

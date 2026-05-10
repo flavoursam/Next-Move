@@ -423,6 +423,7 @@ def account_detail(
     mem_row = db.get_current_memory(account_id)
     memory = mem_row["memory"] if mem_row else None
     pending_action = db.get_pending_action(account_id)
+    fresh_action = db.get_fresh_action(account_id)
     action_history = db.get_action_history(account_id)
     signals = db.get_all_signals(account_id)[:20]
 
@@ -431,6 +432,7 @@ def account_detail(
         "account": account,
         "memory": memory,
         "pending_action": pending_action,
+        "fresh_action": fresh_action,
         "action_history": action_history,
         "signals": signals,
     })
@@ -448,35 +450,71 @@ def approve_account_action(
         return HTMLResponse("Action not found", status_code=404)
 
     action_type = action["type"]
+    is_fresh = action.get("source", "memory") == "fresh"
 
     if action_type in ("send_email", "call", "voicemail"):
         background_tasks.add_task(_generate_and_log_draft, account_id, action_id)
         db.approve_action(action_id)
+        # Log outreach immediately to memory (memory-sourced actions only)
+        if not is_fresh:
+            contact = action["payload"].get("contact_name")
+            background_tasks.add_task(_log_outreach_to_memory, account_id, action_type, contact)
     else:
         db.approve_action(action_id)
 
     return RedirectResponse(f"/accounts/{account_id}", status_code=303)
 
 
+def _log_outreach_to_memory(account_id: int, action_type: str, contact_name: str | None):
+    """Directly update memory to record that outreach was sent, without a Claude call."""
+    try:
+        mem_row = db.get_current_memory(account_id)
+        if not mem_row:
+            return
+
+        memory = dict(mem_row["memory"])
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+        engagement = dict(memory.get("engagement_history", {}))
+        engagement["last_contact_attempt"] = today
+        engagement["total_touchpoints"] = engagement.get("total_touchpoints", 0) + 1
+        memory["engagement_history"] = engagement
+        memory["last_updated"] = today
+
+        db.save_memory(account_id, memory)
+        db.save_signal(account_id, "nextmove", "outreach_sent", {
+            "date": today,
+            "action_type": action_type,
+            "note": f"Outreach approved via NextMove ({action_type})" + (f" to {contact_name}" if contact_name else ""),
+        })
+    except Exception:
+        pass
+
+
 def _generate_and_log_draft(account_id: int, action_id: int):
     """Generate the outreach draft and log it to Close CRM."""
     try:
         action = db.get_action(action_id)
-        mem_row = db.get_current_memory(account_id)
-        if not mem_row or not action:
+        if not action:
             return
 
-        memory = mem_row["memory"]
         payload = action["payload"]
         rep_context = build_rep_context()
+        is_fresh = action.get("source", "memory") == "fresh"
 
-        draft = action_drafter.generate(memory, payload, rep_context)
+        # Fresh actions already have a complete draft in the payload
+        if is_fresh:
+            draft = payload.get("draft", {})
+        else:
+            mem_row = db.get_current_memory(account_id)
+            if not mem_row:
+                return
+            draft = action_drafter.generate(mem_row["memory"], payload, rep_context)
 
         with db.get_conn() as conn:
-            import json as _json
             conn.execute(
                 "UPDATE actions SET draft = ? WHERE id = ?",
-                (_json.dumps(draft), action_id),
+                (json.dumps(draft), action_id),
             )
 
         lead_id = db.get_account(account_id)["crm_lead_id"]
@@ -514,18 +552,111 @@ def refresh_account(
     account_id: int,
     user_name: Optional[str] = Cookie(default=None),
 ):
-    """Manually trigger signal ingestion + memory update for an account."""
+    """Manually trigger signal ingestion + memory update + website re-scrape."""
     account = db.get_account(account_id)
     if not account:
         return HTMLResponse("Account not found", status_code=404)
 
-    background_tasks.add_task(_refresh_account_intelligence, account_id)
+    background_tasks.add_task(_refresh_account_intelligence, account_id, rescrape_website=True)
     return RedirectResponse(f"/accounts/{account_id}", status_code=303)
 
 
-def _refresh_account_intelligence(account_id: int):
-    """Ingest new signals, update memory, generate new action."""
+@app.post("/accounts/{account_id}/run-fresh")
+def run_fresh_pipeline(
+    background_tasks: BackgroundTasks,
+    account_id: int,
+    user_name: Optional[str] = Cookie(default=None),
+):
+    """Run the full 5-stage pipeline against current CRM data, independent of account memory."""
+    account = db.get_account(account_id)
+    if not account:
+        return HTMLResponse("Account not found", status_code=404)
+
+    db.set_account_fresh_running(account_id, True)
+    background_tasks.add_task(_run_fresh_account, account_id)
+    return RedirectResponse(f"/accounts/{account_id}", status_code=303)
+
+
+_CHANNEL_TO_TYPE = {
+    "email": "send_email",
+    "cold_call": "call",
+    "voicemail": "voicemail",
+    "linkedin": "monitor",
+    "research": "monitor",
+}
+
+
+def _run_fresh_account(account_id: int):
+    """Run all 5 pipeline stages against live CRM data. Does not touch account memory."""
+    account = db.get_account(account_id)
+    if not account:
+        return
+
+    lead_id = account["crm_lead_id"]
+    vertical = account.get("vertical", "tourism")
+
+    try:
+        vertical_context, vertical_signals = load_vertical(vertical)
+        lead = fetch_lead(lead_id)
+
+        assessment = run_assess(lead, vertical_context, vertical_signals)
+        strategy_result = run_strategy(assessment)
+        angle_result = run_angle(assessment, strategy_result)
+        action_result = run_action(assessment, strategy_result, angle_result)
+        draft = run_draft(assessment, strategy_result, angle_result, action_result, build_rep_context())
+
+        action_type = _CHANNEL_TO_TYPE.get(
+            action_result.get("recommended_action", "email"), "send_email"
+        )
+        reasoning = action_result.get("reasoning", angle_result.get("why_now", ""))
+
+        db.expire_fresh_actions(account_id)
+        db.create_action(
+            account_id=account_id,
+            memory_id=None,
+            type=action_type,
+            priority="normal",
+            reasoning=reasoning,
+            payload={
+                "assessment": assessment,
+                "strategy_result": strategy_result,
+                "angle_result": angle_result,
+                "action_result": action_result,
+                "draft": draft,
+                "contact_name": action_result.get("contact_name"),
+                "contact_email": action_result.get("contact_email"),
+                "contact_phone": action_result.get("contact_phone"),
+            },
+            source="fresh",
+        )
+
+        # Pre-generate the memory-based draft so both sides are ready for comparison
+        pending = db.get_pending_action(account_id)
+        if pending and not pending.get("draft"):
+            mem_row = db.get_current_memory(account_id)
+            if mem_row:
+                try:
+                    mem_draft = action_drafter.generate(
+                        mem_row["memory"], pending["payload"], build_rep_context()
+                    )
+                    with db.get_conn() as conn:
+                        conn.execute(
+                            "UPDATE actions SET draft = ? WHERE id = ?",
+                            (json.dumps(mem_draft), pending["id"]),
+                        )
+                except Exception:
+                    pass
+
+    except Exception:
+        pass
+    finally:
+        db.set_account_fresh_running(account_id, False)
+
+
+def _refresh_account_intelligence(account_id: int, rescrape_website: bool = False):
+    """Ingest new signals, optionally re-scrape website, update memory, generate new action."""
     from signals import ingestor
+    from pipeline.website import fetch_website_signals
 
     account = db.get_account(account_id)
     if not account:
@@ -539,6 +670,24 @@ def _refresh_account_intelligence(account_id: int):
 
     try:
         new_signals = ingestor.ingest(account_id)
+
+        # Re-scrape website on manual refresh and add a signal if booking software changed
+        if rescrape_website:
+            current_mem = db.get_current_memory(account_id)
+            if current_mem:
+                website_url = current_mem["memory"].get("account_context", {}).get("website")
+                if website_url:
+                    ws = fetch_website_signals(website_url)
+                    if not ws.get("fetch_error"):
+                        mem_software = current_mem["memory"].get("account_context", {}).get("current_software")
+                        detected = ws.get("detected_software")
+                        if detected and detected != mem_software:
+                            db.save_signal(account_id, "website", "website_update", {
+                                "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                                "note": f"Website now shows {detected} as booking software (was: {mem_software or 'unknown'})",
+                            })
+                            new_signals = db.get_unprocessed_signals(account_id)
+
         if not new_signals:
             return
 

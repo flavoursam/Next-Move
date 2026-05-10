@@ -128,6 +128,15 @@ def init_db():
                 actioned_at TEXT
             );
         """)
+        # Migrations — safe to run on existing DBs
+        for migration in [
+            "ALTER TABLE actions ADD COLUMN source TEXT NOT NULL DEFAULT 'memory'",
+            "ALTER TABLE accounts ADD COLUMN fresh_running INTEGER NOT NULL DEFAULT 0",
+        ]:
+            try:
+                conn.execute(migration)
+            except Exception:
+                pass  # column already exists
 
 
 # ─── Users ────────────────────────────────────────────────────────────────────
@@ -522,6 +531,14 @@ def update_account_last_reasoned(account_id: int):
         )
 
 
+def set_account_fresh_running(account_id: int, running: bool):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE accounts SET fresh_running = ? WHERE id = ?",
+            (1 if running else 0, account_id),
+        )
+
+
 def set_account_error(account_id: int, error: str):
     with get_conn() as conn:
         conn.execute(
@@ -633,13 +650,14 @@ def create_action(
     priority: str,
     reasoning: str,
     payload: dict,
+    source: str = "memory",
 ) -> int:
     with get_conn() as conn:
         cur = conn.execute(
             """INSERT INTO actions
-               (account_id, memory_id, type, priority, reasoning, payload, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (account_id, memory_id, type, priority, reasoning, json.dumps(payload), _now()),
+               (account_id, memory_id, type, priority, reasoning, payload, source, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (account_id, memory_id, type, priority, reasoning, json.dumps(payload), source, _now()),
         )
         return cur.lastrowid
 
@@ -647,7 +665,7 @@ def create_action(
 def get_pending_action(account_id: int) -> dict | None:
     with get_conn() as conn:
         row = conn.execute(
-            """SELECT * FROM actions WHERE account_id = ? AND status = 'pending'
+            """SELECT * FROM actions WHERE account_id = ? AND source = 'memory' AND status = 'pending'
                ORDER BY id DESC LIMIT 1""",
             (account_id,),
         ).fetchone()
@@ -713,10 +731,40 @@ def reject_action(action_id: int):
 
 
 def expire_pending_actions(account_id: int):
-    """Mark all pending actions for an account as expired (called before creating a new one)."""
+    """Mark all pending memory-sourced actions for an account as expired."""
     with get_conn() as conn:
         conn.execute(
             """UPDATE actions SET status = 'expired', actioned_at = ?
-               WHERE account_id = ? AND status = 'pending'""",
+               WHERE account_id = ? AND source = 'memory' AND status = 'pending'""",
+            (_now(), account_id),
+        )
+
+
+def get_fresh_action(account_id: int) -> dict | None:
+    """Return the latest pending fresh-pipeline action for an account, if any."""
+    with get_conn() as conn:
+        row = conn.execute(
+            """SELECT * FROM actions WHERE account_id = ? AND source = 'fresh' AND status = 'pending'
+               ORDER BY id DESC LIMIT 1""",
+            (account_id,),
+        ).fetchone()
+    if not row:
+        return None
+    a = dict(row)
+    a["payload"] = json.loads(a["payload"])
+    if a.get("draft"):
+        try:
+            a["draft"] = json.loads(a["draft"])
+        except Exception:
+            pass
+    return a
+
+
+def expire_fresh_actions(account_id: int):
+    """Mark all pending fresh-sourced actions for an account as expired."""
+    with get_conn() as conn:
+        conn.execute(
+            """UPDATE actions SET status = 'expired', actioned_at = ?
+               WHERE account_id = ? AND source = 'fresh' AND status = 'pending'""",
             (_now(), account_id),
         )
