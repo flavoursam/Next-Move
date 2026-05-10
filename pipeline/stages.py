@@ -29,9 +29,13 @@ _client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 # System prompt is shared across all 5 stages — defines Claude's role and constraints
 _SYSTEM_PROMPT = open("prompts/system.md").read()
 
-# Model to use for all stages — override with NEXTMOVE_MODEL in .env
+# Default model for extraction/drafting stages — override with NEXTMOVE_MODEL in .env
 # Use claude-haiku-4-5-20251001 for cheap/fast testing
 MODEL = os.getenv("NEXTMOVE_MODEL", "claude-sonnet-4-6")
+
+# Planning stages (2 — Strategy, 3 — Angle) use Opus for better reasoning
+# Override with NEXTMOVE_PLANNING_MODEL in .env
+PLANNING_MODEL = os.getenv("NEXTMOVE_PLANNING_MODEL", "claude-opus-4-7")
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -63,13 +67,13 @@ def _fill(template: str, **kwargs) -> str:
     return template
 
 
-def _call_claude(prompt: str) -> dict:
+def _call_claude(prompt: str, model: str = None) -> dict:
     """
     Send a filled prompt to Claude and return the parsed JSON response.
     Claude is instructed (via system.md) to return only valid JSON.
     """
     response = _client.messages.create(
-        model=MODEL,
+        model=model or MODEL,
         max_tokens=2048,
         system=_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": prompt}],
@@ -121,7 +125,7 @@ def run_strategy(assessment: dict) -> dict:
         _load_prompt("02_strategy.md"),
         assessment=assessment,
     )
-    return _call_claude(prompt)
+    return _call_claude(prompt, model=PLANNING_MODEL)
 
 
 def run_angle(assessment: dict, strategy_result: dict) -> dict:
@@ -138,7 +142,7 @@ def run_angle(assessment: dict, strategy_result: dict) -> dict:
         strategy_result=strategy_result,
         strategy_instructions=_load_strategy(strategy_name),
     )
-    return _call_claude(prompt)
+    return _call_claude(prompt, model=PLANNING_MODEL)
 
 
 def run_action(assessment: dict, strategy_result: dict, angle_result: dict) -> dict:

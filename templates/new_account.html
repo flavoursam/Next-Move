@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Track Account — NextMove{% endblock %}
+{% block content %}
+
+<div class="breadcrumb">
+  <a href="/accounts">Accounts</a>
+  <span class="breadcrumb-sep">/</span>
+  <span>Track New Account</span>
+</div>
+
+<h1 class="page-title">Track Account</h1>
+
+<div class="card" style="max-width: 480px;">
+  <form method="post" action="/accounts/new">
+    <div class="form-group">
+      <label class="form-label" for="lead_id">Close Lead ID</label>
+      <input type="text" id="lead_id" name="lead_id" placeholder="lead_abc123XYZetc" required autofocus>
+      <p class="form-hint">From the Close URL: app.close.com/lead/<strong>lead_abc123</strong>/</p>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="vertical">Vertical</label>
+      <select id="vertical" name="vertical">
+        <option value="tourism">Tourism</option>
+      </select>
+    </div>
+    <button type="submit" class="btn btn-primary">Build Account Memory</button>
+  </form>
+</div>
+
+<p class="meta" style="margin-top: 16px;">
+  NextMove will fetch this lead from Close, build an initial memory profile,
+  and generate the first next-best-action recommendation.
+  This takes about 30–60 seconds.
+</p>
+
+{% endblock %}

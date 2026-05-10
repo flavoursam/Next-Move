@@ -82,6 +82,51 @@ def init_db():
                 FOREIGN KEY (sequence_id) REFERENCES sequences(id),
                 FOREIGN KEY (user_id) REFERENCES users(id)
             );
+
+            CREATE TABLE IF NOT EXISTS accounts (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                crm_lead_id     TEXT UNIQUE NOT NULL,
+                company_name    TEXT NOT NULL,
+                vertical        TEXT NOT NULL DEFAULT 'tourism',
+                state           TEXT NOT NULL DEFAULT 'active',
+                opportunity_score REAL,
+                last_signal_at  TEXT,
+                last_reasoned_at TEXT,
+                error_message   TEXT,
+                created_at      TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS signals (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_id  INTEGER NOT NULL REFERENCES accounts(id),
+                source      TEXT NOT NULL,
+                type        TEXT NOT NULL,
+                content     TEXT NOT NULL,
+                ingested_at TEXT NOT NULL,
+                processed   INTEGER NOT NULL DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS account_memory (
+                id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_id              INTEGER NOT NULL REFERENCES accounts(id),
+                memory                  TEXT NOT NULL,
+                triggered_by_signal_id  INTEGER REFERENCES signals(id),
+                created_at              TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS actions (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_id  INTEGER NOT NULL REFERENCES accounts(id),
+                memory_id   INTEGER REFERENCES account_memory(id),
+                type        TEXT NOT NULL,
+                priority    TEXT NOT NULL DEFAULT 'normal',
+                reasoning   TEXT NOT NULL,
+                payload     TEXT NOT NULL DEFAULT '{}',
+                status      TEXT NOT NULL DEFAULT 'pending',
+                draft       TEXT,
+                created_at  TEXT NOT NULL,
+                actioned_at TEXT
+            );
         """)
 
 
@@ -404,3 +449,274 @@ def get_commission_events() -> list[dict]:
                ORDER BY c.detected_at DESC"""
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+# ─── Accounts ─────────────────────────────────────────────────────────────────
+
+def create_account(crm_lead_id: str, company_name: str, vertical: str) -> int:
+    now = _now()
+    with get_conn() as conn:
+        cur = conn.execute(
+            """INSERT INTO accounts (crm_lead_id, company_name, vertical, created_at)
+               VALUES (?, ?, ?, ?)""",
+            (crm_lead_id, company_name, vertical, now),
+        )
+        return cur.lastrowid
+
+
+def get_account(account_id: int) -> dict | None:
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def get_account_by_lead_id(crm_lead_id: str) -> dict | None:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM accounts WHERE crm_lead_id = ?", (crm_lead_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def get_all_accounts() -> list[dict]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM accounts ORDER BY created_at DESC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_active_accounts() -> list[dict]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM accounts WHERE state = 'active'"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def update_account_state(account_id: int, state: str):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE accounts SET state = ? WHERE id = ?", (state, account_id)
+        )
+
+
+def update_account_score(account_id: int, score: float):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE accounts SET opportunity_score = ? WHERE id = ?", (score, account_id)
+        )
+
+
+def update_account_last_signal(account_id: int, signal_at: str):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE accounts SET last_signal_at = ? WHERE id = ?", (signal_at, account_id)
+        )
+
+
+def update_account_last_reasoned(account_id: int):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE accounts SET last_reasoned_at = ? WHERE id = ?", (_now(), account_id)
+        )
+
+
+def set_account_error(account_id: int, error: str):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE accounts SET state = 'error', error_message = ? WHERE id = ?",
+            (error, account_id),
+        )
+
+
+# ─── Signals ──────────────────────────────────────────────────────────────────
+
+def save_signal(account_id: int, source: str, type: str, content: dict) -> int:
+    now = _now()
+    with get_conn() as conn:
+        cur = conn.execute(
+            """INSERT INTO signals (account_id, source, type, content, ingested_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (account_id, source, type, json.dumps(content), now),
+        )
+        return cur.lastrowid
+
+
+def get_unprocessed_signals(account_id: int) -> list[dict]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT * FROM signals WHERE account_id = ? AND processed = 0
+               ORDER BY ingested_at""",
+            (account_id,),
+        ).fetchall()
+        result = []
+        for r in rows:
+            s = dict(r)
+            s["content"] = json.loads(s["content"])
+            result.append(s)
+        return result
+
+
+def mark_signals_processed(account_id: int):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE signals SET processed = 1 WHERE account_id = ? AND processed = 0",
+            (account_id,),
+        )
+
+
+def get_all_signals(account_id: int) -> list[dict]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM signals WHERE account_id = ? ORDER BY ingested_at DESC",
+            (account_id,),
+        ).fetchall()
+        result = []
+        for r in rows:
+            s = dict(r)
+            s["content"] = json.loads(s["content"])
+            result.append(s)
+        return result
+
+
+# ─── Account memory ───────────────────────────────────────────────────────────
+
+def save_memory(
+    account_id: int, memory: dict, triggered_by_signal_id: int | None = None
+) -> int:
+    with get_conn() as conn:
+        cur = conn.execute(
+            """INSERT INTO account_memory (account_id, memory, triggered_by_signal_id, created_at)
+               VALUES (?, ?, ?, ?)""",
+            (account_id, json.dumps(memory), triggered_by_signal_id, _now()),
+        )
+        mem_id = cur.lastrowid
+    update_account_last_reasoned(account_id)
+    return mem_id
+
+
+def get_current_memory(account_id: int) -> dict | None:
+    with get_conn() as conn:
+        row = conn.execute(
+            """SELECT * FROM account_memory WHERE account_id = ?
+               ORDER BY id DESC LIMIT 1""",
+            (account_id,),
+        ).fetchone()
+    if not row:
+        return None
+    m = dict(row)
+    m["memory"] = json.loads(m["memory"])
+    return m
+
+
+def get_memory_history(account_id: int) -> list[dict]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM account_memory WHERE account_id = ? ORDER BY id DESC",
+            (account_id,),
+        ).fetchall()
+    result = []
+    for r in rows:
+        m = dict(r)
+        m["memory"] = json.loads(m["memory"])
+        result.append(m)
+    return result
+
+
+# ─── Actions ──────────────────────────────────────────────────────────────────
+
+def create_action(
+    account_id: int,
+    memory_id: int | None,
+    type: str,
+    priority: str,
+    reasoning: str,
+    payload: dict,
+) -> int:
+    with get_conn() as conn:
+        cur = conn.execute(
+            """INSERT INTO actions
+               (account_id, memory_id, type, priority, reasoning, payload, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (account_id, memory_id, type, priority, reasoning, json.dumps(payload), _now()),
+        )
+        return cur.lastrowid
+
+
+def get_pending_action(account_id: int) -> dict | None:
+    with get_conn() as conn:
+        row = conn.execute(
+            """SELECT * FROM actions WHERE account_id = ? AND status = 'pending'
+               ORDER BY id DESC LIMIT 1""",
+            (account_id,),
+        ).fetchone()
+    if not row:
+        return None
+    a = dict(row)
+    a["payload"] = json.loads(a["payload"])
+    if a.get("draft"):
+        a["draft"] = json.loads(a["draft"])
+    return a
+
+
+def get_action_history(account_id: int) -> list[dict]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT * FROM actions WHERE account_id = ?
+               ORDER BY id DESC""",
+            (account_id,),
+        ).fetchall()
+    result = []
+    for r in rows:
+        a = dict(r)
+        a["payload"] = json.loads(a["payload"])
+        if a.get("draft"):
+            try:
+                a["draft"] = json.loads(a["draft"])
+            except Exception:
+                pass
+        result.append(a)
+    return result
+
+
+def get_action(action_id: int) -> dict | None:
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM actions WHERE id = ?", (action_id,)).fetchone()
+    if not row:
+        return None
+    a = dict(row)
+    a["payload"] = json.loads(a["payload"])
+    if a.get("draft"):
+        try:
+            a["draft"] = json.loads(a["draft"])
+        except Exception:
+            pass
+    return a
+
+
+def approve_action(action_id: int, draft: dict | None = None):
+    with get_conn() as conn:
+        conn.execute(
+            """UPDATE actions SET status = 'approved', draft = ?, actioned_at = ?
+               WHERE id = ?""",
+            (json.dumps(draft) if draft else None, _now(), action_id),
+        )
+
+
+def reject_action(action_id: int):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE actions SET status = 'rejected', actioned_at = ? WHERE id = ?",
+            (_now(), action_id),
+        )
+
+
+def expire_pending_actions(account_id: int):
+    """Mark all pending actions for an account as expired (called before creating a new one)."""
+    with get_conn() as conn:
+        conn.execute(
+            """UPDATE actions SET status = 'expired', actioned_at = ?
+               WHERE account_id = ? AND status = 'pending'""",
+            (_now(), account_id),
+        )

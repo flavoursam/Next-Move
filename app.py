@@ -18,6 +18,9 @@ import uvicorn
 
 import db
 import scheduler as sched
+from actions import drafter as action_drafter
+from actions import engine as action_engine
+from memory import updater as mem_updater
 from pipeline.close_write import create_email_draft, create_note
 from pipeline.crm import fetch_lead
 from pipeline.stages import run_assess, run_strategy, run_angle, run_action, run_draft
@@ -317,6 +320,249 @@ def _run_pipeline_touchpoint(seq_id: int, lead_id: str, vertical: str, number: i
         db.update_sequence_status(seq_id, "pending")
     except Exception as e:
         db.update_sequence_error(seq_id, str(e))
+
+
+# ─── Accounts (new intelligence system) ──────────────────────────────────────
+
+@app.get("/accounts", response_class=HTMLResponse)
+def accounts_list(request: Request, user_name: Optional[str] = Cookie(default=None)):
+    if not user_name:
+        return RedirectResponse("/identity")
+
+    accounts = db.get_all_accounts()
+    for acc in accounts:
+        acc["pending_action"] = db.get_pending_action(acc["id"])
+        mem = db.get_current_memory(acc["id"])
+        acc["memory_summary"] = mem["memory"].get("summary", "") if mem else None
+        acc["memory_version"] = mem["memory"].get("memory_version", 0) if mem else 0
+
+    return templates.TemplateResponse(request, "accounts.html", {
+        "user": _get_user(user_name),
+        "accounts": accounts,
+    })
+
+
+@app.get("/accounts/new", response_class=HTMLResponse)
+def new_account_page(request: Request, user_name: Optional[str] = Cookie(default=None)):
+    if not user_name:
+        return RedirectResponse("/identity")
+    return templates.TemplateResponse(request, "new_account.html", {
+        "user": _get_user(user_name),
+    })
+
+
+@app.post("/accounts/new")
+def create_account(
+    background_tasks: BackgroundTasks,
+    lead_id: str = Form(...),
+    vertical: str = Form(default="tourism"),
+    user_name: Optional[str] = Cookie(default=None),
+):
+    if not user_name:
+        return RedirectResponse("/identity")
+
+    lead_id = lead_id.strip()
+
+    existing = db.get_account_by_lead_id(lead_id)
+    if existing:
+        return RedirectResponse(f"/accounts/{existing['id']}", status_code=303)
+
+    account_id = db.create_account(
+        crm_lead_id=lead_id,
+        company_name="...",
+        vertical=vertical,
+    )
+
+    background_tasks.add_task(_init_account, account_id, lead_id, vertical)
+    return RedirectResponse(f"/accounts/{account_id}", status_code=303)
+
+
+def _init_account(account_id: int, lead_id: str, vertical: str):
+    """Build the initial memory and first action for a new account."""
+    try:
+        lead = fetch_lead(lead_id)
+        vertical_context, vertical_signals = load_vertical(vertical)
+
+        with db.get_conn() as conn:
+            conn.execute(
+                "UPDATE accounts SET company_name = ? WHERE id = ?",
+                (lead["company_name"], account_id),
+            )
+
+        assessment = run_assess(lead, vertical_context, vertical_signals)
+        initial_memory = mem_updater.init(assessment, lead, vertical_context)
+        mem_id = db.save_memory(account_id, initial_memory)
+
+        action = action_engine.determine(initial_memory, vertical_context)
+        db.create_action(
+            account_id=account_id,
+            memory_id=mem_id,
+            type=action["type"],
+            priority=action["priority"],
+            reasoning=action["reasoning"],
+            payload=action,
+        )
+
+    except Exception as e:
+        db.set_account_error(account_id, str(e))
+
+
+@app.get("/accounts/{account_id}", response_class=HTMLResponse)
+def account_detail(
+    request: Request,
+    account_id: int,
+    user_name: Optional[str] = Cookie(default=None),
+):
+    if not user_name:
+        return RedirectResponse("/identity")
+
+    account = db.get_account(account_id)
+    if not account:
+        return HTMLResponse("Account not found", status_code=404)
+
+    mem_row = db.get_current_memory(account_id)
+    memory = mem_row["memory"] if mem_row else None
+    pending_action = db.get_pending_action(account_id)
+    action_history = db.get_action_history(account_id)
+    signals = db.get_all_signals(account_id)[:20]
+
+    return templates.TemplateResponse(request, "account.html", {
+        "user": _get_user(user_name),
+        "account": account,
+        "memory": memory,
+        "pending_action": pending_action,
+        "action_history": action_history,
+        "signals": signals,
+    })
+
+
+@app.post("/accounts/{account_id}/actions/{action_id}/approve")
+def approve_account_action(
+    background_tasks: BackgroundTasks,
+    account_id: int,
+    action_id: int,
+    user_name: Optional[str] = Cookie(default=None),
+):
+    action = db.get_action(action_id)
+    if not action or action["account_id"] != account_id:
+        return HTMLResponse("Action not found", status_code=404)
+
+    action_type = action["type"]
+
+    if action_type in ("send_email", "call", "voicemail"):
+        background_tasks.add_task(_generate_and_log_draft, account_id, action_id)
+        db.approve_action(action_id)
+    else:
+        db.approve_action(action_id)
+
+    return RedirectResponse(f"/accounts/{account_id}", status_code=303)
+
+
+def _generate_and_log_draft(account_id: int, action_id: int):
+    """Generate the outreach draft and log it to Close CRM."""
+    try:
+        action = db.get_action(action_id)
+        mem_row = db.get_current_memory(account_id)
+        if not mem_row or not action:
+            return
+
+        memory = mem_row["memory"]
+        payload = action["payload"]
+        rep_context = build_rep_context()
+
+        draft = action_drafter.generate(memory, payload, rep_context)
+
+        with db.get_conn() as conn:
+            import json as _json
+            conn.execute(
+                "UPDATE actions SET draft = ? WHERE id = ?",
+                (_json.dumps(draft), action_id),
+            )
+
+        lead_id = db.get_account(account_id)["crm_lead_id"]
+        action_type = action["type"]
+
+        if action_type == "send_email":
+            email = draft.get("email") or {}
+            create_email_draft(
+                lead_id,
+                payload.get("contact_email"),
+                email.get("subject", ""),
+                email.get("body", ""),
+            )
+        elif action_type in ("call", "voicemail"):
+            call = draft.get("call") or {}
+            script = call.get("script") or call.get("voicemail") or ""
+            label = "Call Script" if action_type == "call" else "Voicemail Script"
+            create_note(lead_id, f"[NextMove {label}]\n\n{script}")
+
+    except Exception:
+        pass
+
+
+@app.post("/accounts/{account_id}/actions/{action_id}/reject")
+def reject_account_action(account_id: int, action_id: int):
+    action = db.get_action(action_id)
+    if action and action["account_id"] == account_id:
+        db.reject_action(action_id)
+    return RedirectResponse(f"/accounts/{account_id}", status_code=303)
+
+
+@app.post("/accounts/{account_id}/refresh")
+def refresh_account(
+    background_tasks: BackgroundTasks,
+    account_id: int,
+    user_name: Optional[str] = Cookie(default=None),
+):
+    """Manually trigger signal ingestion + memory update for an account."""
+    account = db.get_account(account_id)
+    if not account:
+        return HTMLResponse("Account not found", status_code=404)
+
+    background_tasks.add_task(_refresh_account_intelligence, account_id)
+    return RedirectResponse(f"/accounts/{account_id}", status_code=303)
+
+
+def _refresh_account_intelligence(account_id: int):
+    """Ingest new signals, update memory, generate new action."""
+    from signals import ingestor
+
+    account = db.get_account(account_id)
+    if not account:
+        return
+
+    vertical = account.get("vertical", "tourism")
+    try:
+        vertical_context, _ = load_vertical(vertical)
+    except FileNotFoundError:
+        return
+
+    try:
+        new_signals = ingestor.ingest(account_id)
+        if not new_signals:
+            return
+
+        current_mem = db.get_current_memory(account_id)
+        if not current_mem:
+            return
+
+        updated_memory = mem_updater.update(current_mem["memory"], new_signals, vertical_context)
+        first_signal_id = new_signals[0].get("id")
+        mem_id = db.save_memory(account_id, updated_memory, first_signal_id)
+        db.mark_signals_processed(account_id)
+
+        action = action_engine.determine(updated_memory, vertical_context)
+        db.expire_pending_actions(account_id)
+        db.create_action(
+            account_id=account_id,
+            memory_id=mem_id,
+            type=action["type"],
+            priority=action["priority"],
+            reasoning=action["reasoning"],
+            payload=action,
+        )
+    except Exception:
+        pass
 
 
 # ─── Commission ───────────────────────────────────────────────────────────────

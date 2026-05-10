@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Accounts — NextMove{% endblock %}
+{% block content %}
+
+<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+  <h1 class="page-title" style="margin-bottom: 0;">Accounts</h1>
+  <a href="/accounts/new" class="btn btn-primary">+ Track Account</a>
+</div>
+
+{% if not accounts %}
+<div class="card" style="text-align: center; padding: 48px; color: var(--muted);">
+  <p style="font-size: 15px; margin-bottom: 12px;">No accounts tracked yet.</p>
+  <a href="/accounts/new" class="btn btn-primary">Track your first account</a>
+</div>
+{% else %}
+<div class="card" style="padding: 0; overflow: hidden;">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Company</th>
+        <th>State</th>
+        <th>Score</th>
+        <th>Memory</th>
+        <th>Next Action</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for acc in accounts %}
+      <tr>
+        <td>
+          <a href="/accounts/{{ acc.id }}" style="font-weight: 600; color: var(--text); text-decoration: none;">
+            {{ acc.company_name }}
+          </a>
+          <div class="meta"><span>{{ acc.vertical }}</span></div>
+        </td>
+        <td>
+          <span class="badge badge-{{ acc.state }}">{{ acc.state }}</span>
+        </td>
+        <td>
+          {% if acc.opportunity_score is not none %}
+            <span style="font-weight: 600;">{{ (acc.opportunity_score * 100) | int }}%</span>
+          {% else %}
+            <span class="meta">—</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if acc.memory_summary %}
+            <span style="font-size: 12px; color: var(--muted);">v{{ acc.memory_version }}</span>
+          {% else %}
+            <span class="meta">building...</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if acc.pending_action %}
+            <span class="badge badge-{{ acc.pending_action.priority }}">
+              {{ acc.pending_action.type | replace("_", " ") }}
+            </span>
+          {% else %}
+            <span class="meta">—</span>
+          {% endif %}
+        </td>
+        <td style="text-align: right;">
+          <a href="/accounts/{{ acc.id }}" class="btn btn-secondary" style="font-size: 12px; padding: 4px 10px;">View</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% endblock %}
