@@ -1,0 +1,20 @@
+{
+  "software": "bookeo",
+  "known_gaps": [
+    "Interface is dated and can be confusing for guests — affects direct booking conversion",
+    "OTA integrations are limited — primarily suited to direct booking rather than multi-channel distribution",
+    "Mobile experience is weak — guests booking on phones often have a poor experience",
+    "Customer communication tools are basic — automated sequences require a third-party tool",
+    "Reporting capabilities are limited compared to modern platforms"
+  ],
+  "discovery_questions": [
+    "How are you finding Bookeo for direct bookings — are you happy with the conversion on your website?",
+    "Do you use any OTAs alongside Bookeo, and if so, how do you manage inventory across them?",
+    "Are you doing any automated guest communication through Bookeo or is that handled separately?"
+  ],
+  "fareharbor_comparison": [
+    "Modern, mobile-first checkout with meaningfully higher conversion rates",
+    "Full OTA and channel manager integrations for multi-channel distribution",
+    "Automated guest communication built in"
+  ]
+}

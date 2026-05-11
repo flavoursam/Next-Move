@@ -1,0 +1,29 @@
+{
+  "operator_type": "wildlife",
+  "description": "Wildlife experiences — safari tours, birdwatching, marine wildlife encounters, nocturnal tours. Highly seasonal, international market, and dependent on guides with specialist knowledge.",
+  "key_characteristics": [
+    "Highly seasonal demand — tied to migration, breeding, or weather patterns",
+    "International high-value visitor market",
+    "Guide availability and specialist knowledge is the primary constraint",
+    "Small group sizes for quality experience",
+    "Pre-arrival communication is important — what to bring, what to expect"
+  ],
+  "pain_points": [
+    "Small group sizes mean individual booking management overhead is proportionally high",
+    "International guests researching and booking months in advance need a smooth direct booking path",
+    "Pre-arrival communication (gear lists, expectations, meeting points) done manually",
+    "Guide allocation across multiple tours is managed outside the booking system",
+    "Seasonal peaks and lulls make forward booking visibility important for guide scheduling"
+  ],
+  "general_discovery_questions": [
+    "How far out are your bookings typically coming in — months in advance or last-minute?",
+    "What does your pre-arrival communication look like — do you send guests info about what to bring, what to expect?",
+    "How do you manage guide allocation across your different tours?",
+    "Are most of your guests international visitors or domestic?"
+  ],
+  "fareharbor_strengths": [
+    "Automated pre-arrival communication sequences",
+    "International payment options and multi-currency support",
+    "Guide resource management and allocation"
+  ]
+}

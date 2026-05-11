@@ -1,0 +1,29 @@
+{
+  "operator_type": "helicopter",
+  "description": "Helicopter scenic flights and charters. Operations are complex — each machine has fixed capacity, pilots need manifests before departure, and multiple machines may need filling simultaneously.",
+  "key_characteristics": [
+    "Fixed machine capacity per flight (typically 4–6 passengers)",
+    "Pilot manifest required per flight before departure",
+    "Multiple machines may run simultaneously — allocation across machines is daily logistics",
+    "Weather-dependent cancellations require flexible rescheduling",
+    "Passenger details needed ahead of time for pre-flight admin"
+  ],
+  "pain_points": [
+    "Pilot manifest and machine allocation on the day is manual or managed outside the booking system",
+    "Filling each machine optimally requires juggling bookings manually across departure times",
+    "Weather cancellations create a cascade of rescheduling that's hard to manage without a proper system",
+    "Passenger details (name, weight if required) aren't captured at booking in basic systems",
+    "Multi-machine operations can't be viewed in a single booking interface"
+  ],
+  "general_discovery_questions": [
+    "How do you manage your pilot manifest — is that generated from your booking system or done separately?",
+    "When you have multiple machines running on the same day, how do you allocate passengers across them?",
+    "What happens to your bookings when you get a weather cancellation — how do you handle the rescheduling?",
+    "How far in advance do you need passenger details for your pre-flight admin?"
+  ],
+  "fareharbor_strengths": [
+    "Customisable manifest fields including passenger details per booking",
+    "Multi-resource allocation — manage multiple machines from one view",
+    "Flexible rescheduling and cancellation workflows"
+  ]
+}

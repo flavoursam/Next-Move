@@ -830,6 +830,26 @@ def expire_fresh_actions(account_id: int):
     with get_conn() as conn:
         conn.execute(
             """UPDATE actions SET status = 'expired', actioned_at = ?
-               WHERE account_id = ? AND source = 'fresh' AND status = 'pending'""",
+               WHERE account_id = ? AND source IN ('fresh', 'neglected') AND status = 'pending'""",
             (_now(), account_id),
         )
+
+
+def get_latest_neglected_run(account_id: int) -> dict | None:
+    """Return the most recent neglected-tool run for an account."""
+    with get_conn() as conn:
+        row = conn.execute(
+            """SELECT * FROM actions WHERE account_id = ? AND source = 'neglected'
+               ORDER BY id DESC LIMIT 1""",
+            (account_id,),
+        ).fetchone()
+    if not row:
+        return None
+    a = dict(row)
+    a["payload"] = json.loads(a["payload"])
+    if a.get("draft"):
+        try:
+            a["draft"] = json.loads(a["draft"])
+        except Exception:
+            pass
+    return a

@@ -266,6 +266,36 @@
         {% if fp.angle_result %}{{ fp.angle_result.why_now or fresh_action.reasoning }}{% else %}{{ fresh_action.reasoning }}{% endif %}
       </p>
 
+      {% if fp.discovery %}
+      {% set disc = fp.discovery %}
+      <div style="border-top: 1px solid #e9d5ff; padding-top: 14px; margin-bottom: 14px;">
+
+        {% if disc.discovery_questions %}
+        <p class="draft-label" style="color: #7c3aed; margin-bottom: 6px;">Discovery Questions</p>
+        <ol style="margin: 0 0 12px 18px; padding: 0; font-size: 12px; color: var(--muted); line-height: 1.65;">
+          {% for q in disc.discovery_questions %}
+          <li style="margin-bottom: 4px;">{{ q }}</li>
+          {% endfor %}
+        </ol>
+        {% endif %}
+
+        {% if disc.rep_tips %}
+        <p class="draft-label" style="color: #7c3aed; margin-bottom: 6px;">Rep Tips</p>
+        <ul style="margin: 0 0 12px 16px; padding: 0; font-size: 12px; color: var(--muted); line-height: 1.65;">
+          {% for tip in disc.rep_tips %}
+          <li style="margin-bottom: 4px;">{{ tip }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+
+        {% if disc.competitor_context %}
+        <p class="draft-label" style="color: #7c3aed; margin-bottom: 6px;">Competitor Context</p>
+        <p style="font-size: 12px; color: var(--muted); line-height: 1.6; margin: 0;">{{ disc.competitor_context }}</p>
+        {% endif %}
+
+      </div>
+      {% endif %}
+
       <div style="display: flex; gap: 8px;">
         <form method="post" action="/accounts/{{ account.id }}/actions/{{ fresh_action.id }}/approve">
           <button type="submit" class="btn btn-success" style="background: #7c3aed;">

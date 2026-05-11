@@ -93,6 +93,7 @@ Return this JSON structure:
 ```json
 {
   "company_summary": "2-3 sentence description of the business, their current situation, and where they are in the sales process. Include their operator type, location, and one key distinguishing fact.",
+  "operator_type": "one of: scuba_diving | helicopter | general_admission | boat_tour | walking_tour | wildlife | multi_day | null — infer from primary_types, client_segments, lead_type, and company_summary. Use null if the operator type is unclear or does not match any of the known types.",
   "deal_context": {
     "opportunity_value_usd": null,
     "predicted_opp_value": null,

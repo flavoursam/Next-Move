@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}Next Touchpoint — NextMove{% endblock %}
+
+{% block extra_head %}
+<style>
+  .disc-section { margin-bottom: 20px; }
+  .disc-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #7c3aed; margin-bottom: 8px; }
+  .disc-list { margin: 0 0 0 18px; padding: 0; font-size: 13px; color: var(--muted); line-height: 1.7; }
+  .disc-list li { margin-bottom: 4px; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div style="margin-bottom: 28px;">
+  <h1 class="page-title" style="margin-bottom: 4px;">Next Touchpoint</h1>
+  <p class="meta">Enter a Close lead ID to get a recommended outreach, discovery questions, and rep briefing in under 60 seconds.</p>
+</div>
+
+<div class="card" style="max-width: 520px; margin-bottom: 32px;">
+  <form method="post" action="/neglected">
+    <div class="form-group">
+      <label class="form-label">Close Lead ID</label>
+      <input
+        type="text"
+        name="lead_id"
+        value="{{ lead_id }}"
+        placeholder="lead_abc123XYZetc"
+        required
+        autofocus
+        class="input"
+        style="font-family: monospace; font-size: 13px;"
+      >
+      <p class="form-hint">From the Close URL: app.close.com/lead/<strong>lead_abc123</strong>/</p>
+      <label style="display: flex; align-items: flex-start; gap: 10px; margin-top: 14px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); cursor: pointer; line-height: 1.5;">
+        <input type="checkbox" style="margin-top: 3px; flex-shrink: 0; width: 15px; height: 15px; accent-color: var(--accent, #2563eb); cursor: pointer;">
+        <span style="font-size: 13px; color: var(--text); font-weight: 500;">By using this tool, I surrender 10% of this lead's commission to the sales owner.</span>
+      </label>
+    </div>
+    <button type="submit" class="btn btn-primary">Run →</button>
+  </form>
+</div>
+
+{% if error %}
+<div class="alert alert-error">{{ error }}</div>
+{% endif %}
+
+{% if result %}
+{% set draft = result.draft %}
+{% set disc = result.discovery %}
+{% set angle = result.angle_result %}
+{% set action = result.action_result %}
+
+<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+  <div style="display: flex; align-items: center; gap: 10px;">
+    <h2 style="font-size: 18px; font-weight: 700; margin: 0;">{{ result.company_name }}</h2>
+    <span class="meta" style="font-family: monospace; font-size: 11px;">{{ result.lead_id }}</span>
+  </div>
+  <div style="display: flex; align-items: center; gap: 10px;">
+    <span style="font-size: 10px; font-family: monospace; color: var(--muted); opacity: 0.6;" title="NextMove version">{{ result.git_hash }}</span>
+    {% if result.account_id %}
+    <a href="/accounts/{{ result.account_id }}" class="btn btn-secondary" style="font-size: 12px; padding: 4px 10px;">View Account →</a>
+    {% endif %}
+  </div>
+</div>
+<p class="meta" style="margin-bottom: 24px;">
+  {% if result.assessment.deal_context.current_software %}Software: <strong>{{ result.assessment.deal_context.current_software }}</strong> · {% endif %}
+  {% if result.assessment.operator_type %}Type: <strong>{{ result.assessment.operator_type | replace("_", " ") | title }}</strong> · {% endif %}
+  Strategy: <strong>{{ result.strategy_result.selected_strategy | replace("_", " ") | title }}</strong>
+</p>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start;">
+
+  <!-- Left: Draft + Angle -->
+  <div>
+    <div class="card" style="margin-bottom: 16px;">
+      <p class="section-title" style="margin-bottom: 10px;">Recommended Action</p>
+
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+        <span class="badge badge-normal">{{ action.recommended_action | replace("_", " ") | title }}</span>
+        {% if action.contact_name %}
+        <span style="font-size: 13px;"><strong>{{ action.contact_name }}</strong>{% if action.contact_email %} · {{ action.contact_email }}{% endif %}</span>
+        {% endif %}
+      </div>
+
+      {% if draft %}
+        {% if draft.email %}
+        <p class="draft-label">Email Draft</p>
+        <p class="draft-subject">{{ draft.email.subject }}</p>
+        <div class="draft-box" style="font-size: 13px;">{{ draft.email.body }}</div>
+        {% elif draft.call %}
+        <p class="draft-label">{% if action.recommended_action == 'voicemail' %}Voicemail Script{% else %}Call Script{% endif %}</p>
+        <div class="draft-box" style="font-size: 13px;">{{ draft.call.script or draft.call.voicemail }}</div>
+        {% endif %}
+      {% endif %}
+
+      {% if angle %}
+      <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border);">
+        <p style="font-size: 12px; color: var(--muted); margin-bottom: 4px;"><strong>Angle:</strong> {{ angle.primary_pain_point }}</p>
+        <p style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">{{ angle.why_now }}</p>
+        <p style="font-size: 11px; color: var(--muted); opacity: 0.7;">Strength: {{ angle.claim_strength }} · {{ angle.claim_strength_reasoning }}</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Right: Discovery Package -->
+  <div>
+    {% if disc %}
+    <div class="card" style="border-color: #e9d5ff; background: #faf5ff;">
+      <p class="section-title" style="color: #7c3aed; margin-bottom: 14px;">Discovery Package</p>
+
+      {% if disc.discovery_questions %}
+      <div class="disc-section">
+        <p class="disc-label">Questions to ask</p>
+        <ol class="disc-list">
+          {% for q in disc.discovery_questions %}
+          <li>{{ q }}</li>
+          {% endfor %}
+        </ol>
+      </div>
+      {% endif %}
+
+      {% if disc.rep_tips %}
+      <div class="disc-section">
+        <p class="disc-label">Before you call</p>
+        <ul class="disc-list" style="list-style: disc;">
+          {% for tip in disc.rep_tips %}
+          <li>{{ tip }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      {% if disc.competitor_context %}
+      <div class="disc-section">
+        <p class="disc-label">Competitor Context</p>
+        <p style="font-size: 13px; color: var(--muted); line-height: 1.65; margin: 0;">{{ disc.competitor_context }}</p>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+<!-- Debug: what CRM data was pulled -->
+<details style="margin-top: 20px;">
+  <summary style="font-size: 12px; color: var(--muted); cursor: pointer; user-select: none;">Show CRM data pulled</summary>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 10px;">
+
+    <div class="card" style="font-size: 12px;">
+      <p style="font-weight: 600; margin-bottom: 8px; color: var(--muted);">Key signals extracted</p>
+      {% if result.assessment.key_signals %}
+      <ul style="margin: 0 0 0 16px; padding: 0; line-height: 1.7; color: var(--muted);">
+        {% for s in result.assessment.key_signals %}<li>{{ s }}</li>{% endfor %}
+      </ul>
+      {% else %}
+      <p style="color: var(--muted);">None extracted.</p>
+      {% endif %}
+    </div>
+
+    <div class="card" style="font-size: 12px;">
+      <p style="font-weight: 600; margin-bottom: 8px; color: var(--muted);">Raw CRM activity pulled ({{ result.recent_activity | length }} items)</p>
+      {% if result.recent_activity %}
+      {% for a in result.recent_activity[:10] %}
+      <div style="padding: 6px 0; border-bottom: 1px solid var(--border); {% if loop.last %}border-bottom: none;{% endif %}">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+          <span class="badge" style="font-size: 10px; background: var(--bg); color: var(--muted); border: 1px solid var(--border);">{{ a.type }}</span>
+          <span style="color: var(--muted);">{{ a.date }}</span>
+          {% if a.duration_seconds is defined %}<span style="color: var(--muted);">{{ a.duration_seconds }}s</span>{% endif %}
+        </div>
+        {% if a.note %}<p style="color: var(--muted); margin: 2px 0 0; line-height: 1.5;">{{ a.note[:120] }}{% if a.note | length > 120 %}...{% endif %}</p>{% endif %}
+      </div>
+      {% endfor %}
+      {% else %}
+      <p style="color: var(--muted);">No activity returned from Close.</p>
+      {% endif %}
+    </div>
+
+  </div>
+</details>
+
+{% endif %}
+
+{% endblock %}

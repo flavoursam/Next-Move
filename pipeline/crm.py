@@ -23,7 +23,7 @@ developer.close.com
 
 import os
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import requests
 
@@ -79,7 +79,43 @@ def fetch_lead(lead_id: str) -> dict:
     if not response.ok:
         raise ValueError(f"Close API error {response.status_code}: {response.text[:300]}")
 
-    return _normalize(response.json())
+    raw = response.json()
+
+    # The lead endpoint embeds notes/emails in `activity` but NOT calls.
+    # Fetch calls separately and inject so Stage 1 sees the full picture.
+    extra_calls = _fetch_recent_calls(lead_id)
+    if extra_calls:
+        raw.setdefault("activity", []).extend(extra_calls)
+
+    return _normalize(raw)
+
+
+def _fetch_recent_calls(lead_id: str) -> list[dict]:
+    """Fetch recent call activities from the calls endpoint — not included in the lead response."""
+    if not CLOSE_API_KEY:
+        return []
+    since = (datetime.now(timezone.utc) - timedelta(days=ACTIVITY_LOOKBACK_DAYS)).isoformat()
+    try:
+        resp = requests.get(
+            f"{CLOSE_BASE_URL}/activity/call/",
+            auth=(CLOSE_API_KEY, ""),
+            params={"lead_id": lead_id, "date_created__gte": since},
+            timeout=15,
+        )
+        if not resp.ok:
+            return []
+        return [
+            {
+                "_type": "Call",
+                "date_created": c.get("date_created"),
+                "note": (c.get("note") or "")[:300],
+                "duration_seconds": c.get("duration"),
+                "direction": c.get("direction"),
+            }
+            for c in resp.json().get("data", [])
+        ]
+    except Exception:
+        return []
 
 
 def _parse_tier(raw) -> int | None:
@@ -199,7 +235,9 @@ def _extract_recent_activities(raw: dict, contacts: list[dict]) -> list[dict]:
             a.get("note")
             or a.get("subject")
             or a.get("body_text", "")
-        )[:300]  # cap length to avoid huge email bodies clogging context
+        )[:300]
+
+        duration_seconds = a.get("duration_seconds")  # only set on call items
 
         # Flag DNC contacts based on note content
         note_lower = note_text.lower()
@@ -210,11 +248,14 @@ def _extract_recent_activities(raw: dict, contacts: list[dict]) -> list[dict]:
                 if contact["name"] and contact["name"].lower() in note_lower:
                     contact["dnc"] = True
 
-        activities.append({
+        entry = {
             "type": a.get("_type", "").lower(),
             "date": date_str[:10],
             "note": note_text,
-        })
+        }
+        if duration_seconds is not None:
+            entry["duration_seconds"] = duration_seconds
+        activities.append(entry)
 
     activities.sort(key=lambda x: x["date"], reverse=True)
     return activities[:20]
@@ -224,9 +265,13 @@ def _extract_opportunities(raw: dict) -> list[dict]:
     """Extract opportunity records with value, status, and confidence."""
     opportunities = []
     for o in raw.get("opportunities", []):
+        raw_value = o.get("value")
+        # Close stores opportunity values in minor currency units (cents).
+        # Divide by 100 to get the actual dollar/dollar-equivalent amount.
+        value_usd = int(raw_value / 100) if raw_value else None
         opportunities.append({
             "name": o.get("note") or o.get("lead_name"),
-            "value_usd": o.get("value"),
+            "value_usd": value_usd,
             "status": o.get("status_label"),
             "confidence": o.get("confidence"),
         })

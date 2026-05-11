@@ -1,0 +1,29 @@
+{
+  "operator_type": "scuba_diving",
+  "description": "Guided scuba dive operations — reef dives, wreck dives, intro dives. Often includes equipment rental. Day-of manifest is safety-critical.",
+  "key_characteristics": [
+    "Equipment rental and allocation per booking (tanks, wetsuits, fins)",
+    "Diver certification verification required",
+    "Mixed ability groups — certified divers vs intro/discover divers",
+    "Medical waivers and health declarations needed",
+    "Day-of manifest is safety-critical — guides need it before they leave the dock"
+  ],
+  "pain_points": [
+    "Day-of manifest can't be customised per activity type in most booking software — dive operators need fields for cert level, equipment size, experience",
+    "Equipment allocation tracked manually or in a spreadsheet outside the booking system",
+    "Certification verification collected on the day, not at booking — creates day-of admin",
+    "Mixed groups require manual splitting or separate products in the booking system",
+    "International pre-arrival bookings are hard without a clean direct booking flow — dive tourists book months ahead"
+  ],
+  "general_discovery_questions": [
+    "How do you manage equipment allocation for your dives — is that in your booking system or something separate?",
+    "When you have a group with mixed cert levels, how does your manifest handle that?",
+    "Do you collect diver certifications at the point of booking or on the day?",
+    "How do you handle last-minute cancellations when equipment has already been pulled for the day?"
+  ],
+  "fareharbor_strengths": [
+    "Fully customisable manifest fields per activity — cert level, equipment size, experience notes",
+    "Equipment inventory management built in",
+    "Waiver and health declaration collection at booking"
+  ]
+}

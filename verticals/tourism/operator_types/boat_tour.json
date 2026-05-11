@@ -1,0 +1,29 @@
+{
+  "operator_type": "boat_tour",
+  "description": "Boat-based tours — harbour cruises, whale watching, sailing charters, dolphin tours. Fixed vessel capacity, weather-dependent, and often reliant on international pre-arrival bookings.",
+  "key_characteristics": [
+    "Fixed vessel capacity per departure",
+    "Weather-dependent cancellations",
+    "Strong international visitor market — pre-arrival bookings from overseas",
+    "Often listed heavily on OTAs (Viator, GetYourGuide)",
+    "Multiple departure times per day with separate manifests"
+  ],
+  "pain_points": [
+    "OTA dependency is high — Viator and GetYourGuide take 20–30% per booking",
+    "Managing capacity across multiple departure times and vessels without a centralised system",
+    "International guests can't easily book direct in advance — language and payment barriers",
+    "Weather cancellations require manual contact with booked guests",
+    "Passenger manifest for the harbour master or coast guard is a manual daily task"
+  ],
+  "general_discovery_questions": [
+    "What percentage of your bookings come through Viator or GetYourGuide versus direct?",
+    "How do you manage capacity across your different departure times — is that in your booking system?",
+    "When you get a weather cancellation, how do you notify guests and manage refunds?",
+    "Are international visitors able to book directly on your website, or do they mostly go through OTAs?"
+  ],
+  "fareharbor_strengths": [
+    "Strong international distribution via OTA integrations with better direct booking complement",
+    "Automated guest communication for cancellations and rescheduling",
+    "Multi-departure capacity management from a single dashboard"
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "operator_type": "general_admission",
+  "description": "High-volume, fixed-venue attractions — museums, nature parks, cultural sites, zoos. No capacity constraint means the priority is streamlined check-in and wide distribution, not slot management.",
+  "key_characteristics": [
+    "High booking volume, low per-booking complexity",
+    "No capacity constraint — can serve as many visitors as arrive",
+    "Streamlined check-in at scale is operationally critical",
+    "Wide distribution strategy — visibility on as many channels as possible",
+    "Seasonal and event-driven demand spikes"
+  ],
+  "pain_points": [
+    "Check-in is slow or inconsistent — scanning tickets from OTAs, walk-ins, and direct bookings separately",
+    "Managing multiple distribution channels (OTAs, direct, resellers) without a centralised inventory view",
+    "No visibility into which channels are driving bookings — hard to optimise marketing spend",
+    "No upsell or add-on capability at the point of booking (guided tours, audio guides, F&B)",
+    "Peak season creates queue and check-in bottlenecks that damage guest experience"
+  ],
+  "general_discovery_questions": [
+    "What does your check-in process look like at peak times — do you scan tickets from each booking source separately?",
+    "How many distribution channels are you on currently, and how do you manage inventory across them?",
+    "Do you have visibility into which channels are driving the most bookings, or is that hard to track?",
+    "Are you doing anything at the point of booking to upsell guided tours or add-ons?"
+  ],
+  "fareharbor_strengths": [
+    "Unified check-in across all booking sources — single scan regardless of channel",
+    "Channel manager for centralised distribution across OTAs and direct",
+    "Built-in upsell and add-on capability at checkout"
+  ]
+}

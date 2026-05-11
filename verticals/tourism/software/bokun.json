@@ -1,0 +1,20 @@
+{
+  "software": "bokun",
+  "known_gaps": [
+    "Strong on distribution and channel connectivity, but the direct booking widget and checkout flow has limited customisation options",
+    "Manifest functionality is basic — limited ability to add custom fields per product type",
+    "Pricing can be steep for smaller operators relative to booking volume",
+    "Support response times can be slow for operators outside core European markets",
+    "Reporting on direct vs OTA channel performance is harder to pull without manual work"
+  ],
+  "discovery_questions": [
+    "You're on Bokun — how are you finding the direct booking side versus the OTA channel distribution piece?",
+    "Are there things you wish the booking form or manifest captured that Bokun doesn't currently support?",
+    "How are you tracking which channels are actually performing for you?"
+  ],
+  "fareharbor_comparison": [
+    "More flexible booking form and manifest customisation per activity type",
+    "No monthly fee — pay per booking only, so cost scales with volume",
+    "Stronger direct booking conversion tools and checkout customisation"
+  ]
+}

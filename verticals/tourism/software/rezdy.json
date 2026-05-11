@@ -1,0 +1,20 @@
+{
+  "software": "rezdy",
+  "known_gaps": [
+    "Cannot track the guest through the full buying funnel — booking data gets fragmented after confirmation, making it hard to see where drop-off happens",
+    "Customer communication is limited — no automated pre-arrival or post-booking sequences; operators do this manually or via a separate email tool",
+    "Manifest fields are rigid — cannot add custom fields per activity type (e.g. certification level for dive ops, passenger details for heli tours)",
+    "International distribution is narrower than FareHarbor's OTA network",
+    "Reporting is basic — channel mix and booking source attribution is hard to see in one place"
+  ],
+  "discovery_questions": [
+    "How are you staying in touch with guests between booking and arrival — is that automated through Rezdy or do you do it manually?",
+    "When you look at where your bookings are coming from, do you have that visibility in Rezdy or do you piece it together elsewhere?",
+    "Are there any fields you wish you could capture at booking that Rezdy doesn't currently support?"
+  ],
+  "fareharbor_comparison": [
+    "Full booking funnel visibility — see exactly where guests drop off before confirming",
+    "Automated pre-arrival and post-visit communication built in",
+    "Fully customisable manifest and booking form fields per activity type"
+  ]
+}

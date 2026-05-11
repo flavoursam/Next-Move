@@ -2,6 +2,7 @@
 
 import json
 import os
+import subprocess
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Optional
@@ -21,14 +22,26 @@ import scheduler as sched
 from actions import drafter as action_drafter
 from actions import engine as action_engine
 from memory import updater as mem_updater
+from neglect import MEANINGFUL_ACTIVITY_RULES
 from pipeline.close_write import create_email_draft, create_note
+from pipeline.context_loader import load_lenses
 from pipeline.crm import fetch_lead
-from pipeline.stages import run_assess, run_strategy, run_angle, run_action, run_draft
+from pipeline.stages import run_assess, run_strategy, run_angle, run_action, run_draft, run_discovery
 from run import build_rep_context, load_vertical
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _git_hash() -> str:
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            stderr=subprocess.DEVNULL,
+        ).decode().strip()
+    except Exception:
+        return "unknown"
 
 
 @asynccontextmanager
@@ -335,6 +348,8 @@ def accounts_list(request: Request, user_name: Optional[str] = Cookie(default=No
         mem = db.get_current_memory(acc["id"])
         acc["memory_summary"] = mem["memory"].get("summary", "") if mem else None
         acc["memory_version"] = mem["memory"].get("memory_version", 0) if mem else 0
+        last_run = db.get_latest_neglected_run(acc["id"])
+        acc["last_neglected_run"] = last_run
 
     return templates.TemplateResponse(request, "accounts.html", {
         "user": _get_user(user_name),
@@ -754,6 +769,17 @@ def _run_fresh_account(account_id: int):
         action_result = run_action(assessment, strategy_result, angle_result)
         draft = run_draft(assessment, strategy_result, angle_result, action_result, build_rep_context())
 
+        operator_type = assessment.get("operator_type")
+        current_software = (
+            assessment.get("deal_context", {}).get("current_software")
+            or lead.get("current_software")
+        )
+        operator_ctx, software_ctx = load_lenses(vertical, operator_type, current_software)
+        try:
+            discovery = run_discovery(assessment, angle_result, operator_ctx, software_ctx)
+        except Exception:
+            discovery = None
+
         action_type = _CHANNEL_TO_TYPE.get(
             action_result.get("recommended_action", "email"), "send_email"
         )
@@ -772,6 +798,7 @@ def _run_fresh_account(account_id: int):
                 "angle_result": angle_result,
                 "action_result": action_result,
                 "draft": draft,
+                "discovery": discovery,
                 "contact_name": action_result.get("contact_name"),
                 "contact_email": action_result.get("contact_email"),
                 "contact_phone": action_result.get("contact_phone"),
@@ -861,6 +888,120 @@ def _refresh_account_intelligence(account_id: int, rescrape_website: bool = Fals
         )
     except Exception:
         pass
+
+
+# ─── Neglected — single lead run ──────────────────────────────────────────────
+
+@app.get("/neglected", response_class=HTMLResponse)
+def neglected_page(request: Request, user_name: Optional[str] = Cookie(default=None)):
+    if not user_name:
+        return RedirectResponse("/identity")
+    return templates.TemplateResponse(request, "neglected.html", {
+        "user": _get_user(user_name),
+        "result": None,
+        "error": None,
+        "lead_id": "",
+    })
+
+
+@app.post("/neglected", response_class=HTMLResponse)
+def run_neglected(
+    background_tasks: BackgroundTasks,
+    request: Request,
+    lead_id: str = Form(...),
+    user_name: Optional[str] = Cookie(default=None),
+):
+    if not user_name:
+        return RedirectResponse("/identity")
+
+    lead_id = lead_id.strip()
+    vertical = "tourism"
+    result = None
+    error = None
+
+    try:
+        vertical_context, vertical_signals = load_vertical(vertical)
+        lead = fetch_lead(lead_id)
+
+        assessment = run_assess(lead, vertical_context, vertical_signals)
+        strategy_result = run_strategy(assessment)
+        angle_result = run_angle(assessment, strategy_result)
+        action_result = run_action(assessment, strategy_result, angle_result)
+        draft = run_draft(assessment, strategy_result, angle_result, action_result, build_rep_context())
+
+        operator_type = assessment.get("operator_type")
+        current_software = (
+            assessment.get("deal_context", {}).get("current_software")
+            or lead.get("current_software")
+        )
+        operator_ctx, software_ctx = load_lenses(vertical, operator_type, current_software)
+        try:
+            discovery = run_discovery(assessment, angle_result, operator_ctx, software_ctx)
+        except Exception:
+            discovery = None
+
+        git_hash = _git_hash()
+
+        # Auto-register the account so this run is stored and visible in Accounts
+        existing = db.get_account_by_lead_id(lead_id)
+        if existing:
+            account_id = existing["id"]
+        else:
+            account_id = db.create_account(
+                crm_lead_id=lead_id,
+                company_name=lead.get("company_name", "..."),
+                vertical=vertical,
+            )
+            background_tasks.add_task(_init_account, account_id, lead_id, vertical)
+
+        # Store the run as an action so it appears in the account's history
+        action_type = _CHANNEL_TO_TYPE.get(
+            action_result.get("recommended_action", "email"), "send_email"
+        )
+        db.expire_fresh_actions(account_id)
+        db.create_action(
+            account_id=account_id,
+            memory_id=None,
+            type=action_type,
+            priority="normal",
+            reasoning=action_result.get("reasoning", angle_result.get("why_now", "")),
+            payload={
+                "assessment": assessment,
+                "strategy_result": strategy_result,
+                "angle_result": angle_result,
+                "action_result": action_result,
+                "draft": draft,
+                "discovery": discovery,
+                "contact_name": action_result.get("contact_name"),
+                "contact_email": action_result.get("contact_email"),
+                "contact_phone": action_result.get("contact_phone"),
+                "git_hash": git_hash,
+            },
+            source="neglected",
+        )
+
+        result = {
+            "company_name": lead.get("company_name"),
+            "lead_id": lead_id,
+            "account_id": account_id,
+            "assessment": assessment,
+            "strategy_result": strategy_result,
+            "angle_result": angle_result,
+            "action_result": action_result,
+            "draft": draft,
+            "discovery": discovery,
+            "recent_activity": lead.get("recent_activity", []),
+            "git_hash": git_hash,
+        }
+    except Exception as e:
+        error = str(e)
+
+    return templates.TemplateResponse(request, "neglected.html", {
+        "user": _get_user(user_name),
+        "result": result,
+        "error": error,
+        "lead_id": lead_id,
+    })
 
 
 # ─── Commission ───────────────────────────────────────────────────────────────

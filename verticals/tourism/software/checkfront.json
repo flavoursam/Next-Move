@@ -1,0 +1,20 @@
+{
+  "software": "checkfront",
+  "known_gaps": [
+    "Complex pricing rules are difficult to set up and maintain — operators often need ongoing support for anything beyond basic structures",
+    "Channel manager is limited — connecting to multiple OTAs requires workarounds and is less reliable than dedicated channel managers",
+    "Customer-facing booking experience can feel dated compared to newer platforms — affects conversion",
+    "Mobile experience for operators managing bookings on the go is weaker than current standards",
+    "Limited upsell capability at the point of checkout"
+  ],
+  "discovery_questions": [
+    "How are you finding Checkfront for managing your OTA connections — is that working smoothly?",
+    "What does the checkout experience look like for your guests — are you happy with how it converts?",
+    "Are there things you find yourself working around in Checkfront that slow you down day-to-day?"
+  ],
+  "fareharbor_comparison": [
+    "Modern, mobile-optimised booking flow with higher typical conversion rates",
+    "Stronger and more reliable OTA and channel manager integrations",
+    "Built-in upsell and add-on capability at checkout"
+  ]
+}
