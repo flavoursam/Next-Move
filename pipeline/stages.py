@@ -67,14 +67,14 @@ def _fill(template: str, **kwargs) -> str:
     return template
 
 
-def _call_claude(prompt: str, model: str = None) -> dict:
+def _call_claude(prompt: str, model: str = None, max_tokens: int = 2048) -> dict:
     """
     Send a filled prompt to Claude and return the parsed JSON response.
     Claude is instructed (via system.md) to return only valid JSON.
     """
     response = _client.messages.create(
         model=model or MODEL,
-        max_tokens=2048,
+        max_tokens=max_tokens,
         system=_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": prompt}],
     )
@@ -111,7 +111,7 @@ def run_assess(lead: dict, vertical_context: str, vertical_signals: dict) -> dic
         vertical_context=vertical_context,
         vertical_signals=vertical_signals,
     )
-    return _call_claude(prompt)
+    return _call_claude(prompt, max_tokens=4096)
 
 
 def run_strategy(assessment: dict) -> dict:

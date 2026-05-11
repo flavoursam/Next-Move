@@ -22,5 +22,17 @@
   <main class="main">
     {% block content %}{% endblock %}
   </main>
+  <script>
+    document.addEventListener('submit', function(e) {
+      var form = e.target;
+      var btn = form.querySelector('button[type="submit"], button:not([type])');
+      if (!btn || btn.dataset.noLoading) return;
+      btn.disabled = true;
+      var spinner = document.createElement('span');
+      spinner.className = 'spinner';
+      spinner.style.cssText = 'width:13px;height:13px;border-width:2px;margin-right:6px;vertical-align:middle;';
+      btn.insertBefore(spinner, btn.firstChild);
+    });
+  </script>
 </body>
 </html>

@@ -5,12 +5,24 @@ Returns a structured action dict ready to be stored and shown to the rep.
 
 import json
 import os
+import re
 from datetime import date
 
 import anthropic
 
 _client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 MODEL = os.getenv("NEXTMOVE_PLANNING_MODEL", "claude-opus-4-7")
+
+
+def _parse_tier(raw) -> int | None:
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    try:
+        return int(s)
+    except ValueError:
+        m = re.search(r'\d+', s)
+        return int(m.group()) if m else None
 
 
 def _load_prompt() -> str:
@@ -37,6 +49,15 @@ def determine(account_memory: dict, vertical_context: str, excluded_angles: list
     excluded_text = (
         "\n".join(f"- {a}" for a in excluded) if excluded else "None — no restrictions apply."
     )
+
+    tier = _parse_tier(account_memory.get("account_context", {}).get("tier"))
+    pain_points = account_memory.get("pain_points", [])
+    if tier is not None and tier >= 3:
+        pain_points = [p for p in pain_points if p.get("source") != "website_observation"]
+    else:
+        pain_points = sorted(pain_points, key=lambda p: 1 if p.get("source") == "website_observation" else 0)
+    account_memory = {**account_memory, "pain_points": pain_points}
+
     prompt = _fill(
         _load_prompt(),
         account_memory=account_memory,

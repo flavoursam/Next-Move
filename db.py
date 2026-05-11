@@ -657,6 +657,11 @@ def get_all_signals(account_id: int) -> list[dict]:
 
 # ─── Account memory ───────────────────────────────────────────────────────────
 
+def clear_memory(account_id: int):
+    with get_conn() as conn:
+        conn.execute("DELETE FROM account_memory WHERE account_id = ?", (account_id,))
+
+
 def save_memory(
     account_id: int, memory: dict, triggered_by_signal_id: int | None = None
 ) -> int:

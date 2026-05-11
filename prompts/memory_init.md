@@ -79,12 +79,38 @@ The memory document must follow this exact JSON structure:
   },
 
   "account_context": {
-    "current_software": "string or null",
+    "tier": null,
+    "predicted_tier": null,
+    "lead_qualification": "string or null",
+    "fit": "string or null",
+    "operator_type": "string or null — from client_segments or primary_types e.g. 'Activity operator', 'Wildlife experience'",
+    "current_software": "string or null — all vendors listed, comma-separated if multiple",
     "website": "string or null",
     "location": "string or null",
+    "language": "string or null",
     "opp_value_usd": null,
+    "predicted_opp_value": null,
     "crm_status": "string or null",
+    "is_former_client": false,
+    "client_activation_date": "YYYY-MM-DD or null",
+    "client_churn_date": "YYYY-MM-DD or null",
+    "client_churn_reasons": [],
+    "lifetime_booking_fees_usd": null,
     "notes": []
+  },
+
+  "digital_presence": {
+    "tripadvisor_review_count": null,
+    "google_review_count": null,
+    "semrush_organic_traffic": null,
+    "ota_channels": [],
+    "has_direct_booking_widget": null,
+    "notes": "string or null — e.g. 'High TripAdvisor count with no direct booking widget = quantifiable OTA leakage'"
+  },
+
+  "engagement_signals": {
+    "fh_webinars_attended": [],
+    "fh_webinars_registered": []
   },
 
   "vertical_signals": {
@@ -102,6 +128,10 @@ Rules:
 - pain_points must reference specific evidence — see confidence rules below
 - If there are no objections on record, return an empty array — do not invent them
 - last_updated must be today's date
+- Populate account_context.tier, lead_qualification, fit, operator_type, current_software, is_former_client, client_churn_reasons, predicted_opp_value from the lead snapshot and assessment — do not leave these null if the data exists.
+- Populate digital_presence from tripadvisor_review_count, google_review_count, semrush_organic_traffic, and ota_review_links in the lead snapshot. If tripadvisor_review_count is high (200+) and the operator has no confirmed direct booking software or has OTA channels listed, add a notes entry explaining the direct booking gap.
+- Populate engagement_signals.fh_webinars_attended from the lead snapshot — this is a genuine product interest signal.
+- If am_note or sales_ops_note is present in the lead snapshot, extract any relevant facts into known_facts and any intelligence into pain_points or objections as appropriate, with source = "crm_conversation" and confidence based on the confidence rules below.
 - Return valid JSON only. No markdown. No preamble. Start with { and end with }.
 
 Pain point confidence rules — apply these strictly:
@@ -110,3 +140,6 @@ Pain point confidence rules — apply these strictly:
 - confidence "low": inferred from website observations only (no booking widget, Book Now CTA mismatch, OTA badges) OR inferred purely from vertical generalisation with no account-specific evidence
 
 Website-only observations (no_booking_detected, has_book_now_cta mismatch, detected_software from scrape) must always be confidence "low". They are weak inferences about the outside of the business, not confirmed pain. Do not promote them to medium or high regardless of how prominent the signal appears.
+
+- Populate `account_context.tier` from `lead_snapshot.tier` (integer or null).
+- If `lead_snapshot.tier` is 3, 4, or 5: do NOT include any pain points with `source = "website_observation"`. Omit them entirely — do not mark them low confidence, do not include them. If this leaves pain_points empty, return an empty array rather than inventing pain points.

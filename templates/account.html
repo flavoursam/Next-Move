@@ -56,7 +56,7 @@
   .stage-list li { font-size: 11px; color: #7c3aed; padding: 1px 0; }
   .stage-list li::before { content: "→ "; opacity: 0.4; }
 </style>
-{% if account.fresh_running %}
+{% if account.fresh_running or (not memory and account.state != 'error') %}
 <meta http-equiv="refresh" content="6">
 {% endif %}
 {% endblock %}
@@ -83,6 +83,9 @@
   <div style="display: flex; gap: 8px;">
     <form method="post" action="/accounts/{{ account.id }}/refresh">
       <button type="submit" class="btn btn-secondary">Refresh Signals</button>
+    </form>
+    <form method="post" action="/accounts/{{ account.id }}/reinit-memory">
+      <button type="submit" class="btn btn-secondary" title="Re-fetch from Close and rebuild memory from scratch">Re-init Memory</button>
     </form>
   </div>
 </div>

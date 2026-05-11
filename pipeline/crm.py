@@ -22,6 +22,7 @@ developer.close.com
 """
 
 import os
+import re
 from datetime import datetime, timezone
 
 import requests
@@ -81,6 +82,17 @@ def fetch_lead(lead_id: str) -> dict:
     return _normalize(response.json())
 
 
+def _parse_tier(raw) -> int | None:
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    try:
+        return int(s)
+    except ValueError:
+        m = re.search(r'\d+', s)
+        return int(m.group()) if m else None
+
+
 def _normalize(raw: dict) -> dict:
     """
     Convert the raw Close API response into the NextMove lead schema.
@@ -91,28 +103,55 @@ def _normalize(raw: dict) -> dict:
     contacts = _extract_contacts(raw)
     activities = _extract_recent_activities(raw, contacts)
     opportunities = _extract_opportunities(raw)
-    custom = _extract_custom_fields(raw)
+    custom = _map_custom_fields(raw)
+    tier = _parse_tier(custom.get("tier"))
 
     last_activity_date = activities[0]["date"] if activities else None
     days_since_activity = _days_since(last_activity_date)
     website = raw.get("url")
 
+    current_software = custom.get("current_software")
+    if isinstance(current_software, list):
+        current_software = ", ".join(current_software) if current_software else None
+
     return {
         "lead_id": raw.get("id"),
         "company_name": raw.get("display_name"),
         "website": website,
-        "industry": custom.get("industry"),
-        "location": _extract_location(raw),
+        "tier": tier,
+        "predicted_tier": custom.get("predicted_tier"),
+        "lead_qualification": custom.get("lead_qualification"),
+        "fit": custom.get("fit"),
+        "lead_type": custom.get("lead_type"),
+        "client_segments": custom.get("client_segments"),
+        "primary_types": custom.get("primary_types"),
+        "industry": custom.get("lead_type"),  # best available proxy for industry
+        "location": _extract_location(raw, custom),
+        "language": custom.get("language_primary"),
         "contacts": contacts,
         "crm_notes": [a["note"] for a in activities if a.get("note")],
         "recent_activity": activities,
         "opportunities": opportunities,
         "status": raw.get("status_label"),
-        "current_software": custom.get("current_software") or custom.get("booking_software"),
+        "current_software": current_software,
+        "tripadvisor_review_count": custom.get("tripadvisor_review_count"),
+        "google_review_count": custom.get("google_review_count"),
+        "semrush_organic_traffic": custom.get("semrush_organic_traffic"),
+        "predicted_opp_value": custom.get("predicted_opp_value"),
+        "lifetime_booking_fees": custom.get("lifetime_booking_fees"),
+        "am_note": custom.get("am_note"),
+        "sales_ops_note": custom.get("sales_ops_note"),
+        "sales_latest_call": custom.get("sales_latest_call"),
+        "sales_closed_date": custom.get("sales_closed_date"),
+        "client_activation_date": custom.get("client_activation_date"),
+        "client_churn_date": custom.get("client_churn_date"),
+        "client_churn_reasons": custom.get("client_churn_reasons"),
+        "fh_webinars_attended": custom.get("fh_webinars_attended"),
+        "fh_webinars_registered": custom.get("fh_webinars_registered"),
         "last_activity_date": last_activity_date,
         "days_since_activity": days_since_activity,
         "known_facts": [],
-        "website_signals": fetch_website_signals(website) if website else {},
+        "website_signals": fetch_website_signals(website) if website and (tier is None or tier < 3) else {},
     }
 
 
@@ -195,7 +234,7 @@ def _extract_opportunities(raw: dict) -> list[dict]:
 
 
 def _extract_custom_fields(raw: dict) -> dict:
-    """Pull out Close custom fields — stored as 'custom.field_name' keys in the raw response."""
+    """Pull out Close custom fields — stored as 'custom.FIELD_ID' keys in the raw response."""
     return {
         k.replace("custom.", ""): v
         for k, v in raw.items()
@@ -203,7 +242,61 @@ def _extract_custom_fields(raw: dict) -> dict:
     }
 
 
-def _extract_location(raw: dict) -> str | None:
+# Maps Close custom field IDs to human-readable keys used throughout the pipeline.
+# To find a field ID: Close Settings → Custom Fields → click the field → copy ID from URL.
+_FIELD_MAP = {
+    # Account classification
+    "lcf_wuks3IkYJ93mM0S2kpxldL7iwmXcXKe4DiQdHArvxWu": "tier",
+    "cf_y8Ba8Pl8FsUkc7sXm0DkkHLM1Ae1OGOW4Ulkx3AliBf": "predicted_tier",
+    "cf_FjcMH2YLAo6p8xen2g65YZwfwR7nXXcEQp3YfmWeD3o": "lead_qualification",
+    "cf_DZ35PHMzwNol3NE01jCk406BaW1VzmWDAMiyhAzeSGH": "fit",
+    "cf_0LTUb5ADPCh1ZG6RD1VRpdN1BDOf37hFJxTAA98826o": "client_segments",
+    "cf_fpbxs9J81lOu406v6wGV2VS2dbLYoZDkqeEcYfvBWRA": "primary_types",
+    "lcf_wOt970m1weoTzm2QxeTODqEsPwx3aIRoQqvlLUxKIcH": "lead_type",
+    # Current software
+    "cf_HPlNoc99E3H49Sf4Z9otFijESKcBmCz5go0pS1gJq0R": "current_software",
+    # Location
+    "cf_DUfHlJrrYZUDfY4EVJllUFrL0etyn4B895Ns6Kvwo5J": "countries",
+    "cf_Ne8hPmZ9BOM6uA3uqVLvlHw81YDFHeZviavEbo5PhCH": "cities",
+    "lcf_NunprVZs6cFtUB2PgnWd18l910RXnPt3JM2auLoJJOI": "language_primary",
+    # Online presence / review signals
+    "cf_gkeWmW7X5sy8KYLxEDsoKHsfKWtYVzWM79tOu4lgcTK": "tripadvisor_review_count",
+    "cf_9WMIE0niFBaWcK7HvjRzF59b8YgJ5Tqd2XdSCPfHEiM": "google_review_count",
+    "cf_A3sQ09JKt3siKWoyVklrsVSf6TbHuQ2RqIIGlhoptB4": "semrush_organic_traffic",
+    # Opportunity / revenue
+    "cf_nSWiMSI2ee5JP22MXvBzRMk3rDtO6i5WoXn6oGj0pei": "predicted_opp_value",
+    "cf_gN7QeruBVYkb1nsVSYOyCqd23I9mJhrw6rRNEBxq6bh": "lifetime_booking_fees",
+    # Sales notes
+    "lcf_BmjhB6SUmI3xhA8g2zjJSz1xV4XoRN9g3r0eSxodN13": "am_note",
+    "cf_0lLiKi6vAAfHHmSN4JUWJrd3qD34KEopHgaxLLVOudh": "sales_ops_note",
+    # Sales activity dates
+    "lcf_EFUPZ1xOII3rmM4IJMaTEDdKuk1R9ep9DeHd1U1F1wI": "sales_latest_call",
+    "lcf_T0VHuPDQdbfzSSqaP1om4zv9oIIQ5dNVq4HvKvghqW2": "sales_closed_date",
+    # Client lifecycle
+    "cf_FsPT90QCTlivqgwL0l36M3F7mc5TkNbqj5f9LXOy7HZ": "client_activation_date",
+    "lcf_ozjQoa5K6WByWQeWmHjUkKhRxVQUv4XX4dOd46CZaI8": "client_churn_date",
+    "cf_QRTa0RKVSqbDhbxCbBbQLTWEMzjefccNoBEGOhhDsYB": "client_churn_reasons",
+    # Engagement signals
+    "lcf_DMZPOaIr9VPteLOC2xe9ZFfYZSiUvYBP6ElEn8Mf3IN": "fh_webinars_attended",
+    "lcf_aiQBUZukIWBJdapOq2SZ5bhn0xtIQgllGomZfyGuhZt": "fh_webinars_registered",
+}
+
+
+def _map_custom_fields(raw: dict) -> dict:
+    """
+    Translate raw Close custom field IDs to human-readable keys.
+    Multi-value fields (lists) are preserved as lists.
+    Unknown field IDs are kept under their raw ID so no data is silently dropped.
+    """
+    raw_custom = _extract_custom_fields(raw)
+    result = {}
+    for field_id, value in raw_custom.items():
+        key = _FIELD_MAP.get(field_id, field_id)
+        result[key] = value
+    return result
+
+
+def _extract_location(raw: dict, custom: dict) -> str | None:
     """Best-effort location from addresses or custom fields."""
     addresses = raw.get("addresses", [])
     if addresses:
@@ -215,9 +308,13 @@ def _extract_location(raw: dict) -> str | None:
         location = ", ".join(p for p in parts if p)
         if location:
             return location
-    # Fall back to custom location fields
-    custom = _extract_custom_fields(raw)
-    return custom.get("location") or custom.get("country")
+    # Fall back to Close custom location fields
+    cities = custom.get("cities")
+    countries = custom.get("countries")
+    city_str = ", ".join(cities) if isinstance(cities, list) else cities
+    country_str = ", ".join(countries) if isinstance(countries, list) else countries
+    parts = [p for p in [city_str, country_str] if p]
+    return ", ".join(parts) if parts else None
 
 
 def _days_since(date_str: str | None) -> int | None:

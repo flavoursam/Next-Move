@@ -652,6 +652,49 @@ def _run_rethink(account_id: int):
         db.set_account_rethinking(account_id, False)
 
 
+@app.post("/accounts/{account_id}/reinit-memory")
+def reinit_account_memory(background_tasks: BackgroundTasks, account_id: int):
+    """Re-fetch lead from Close, re-run Stage 1, and rebuild memory from scratch."""
+    account = db.get_account(account_id)
+    if not account:
+        return HTMLResponse("Account not found", status_code=404)
+    background_tasks.add_task(_reinit_memory, account_id)
+    return RedirectResponse(f"/accounts/{account_id}", status_code=303)
+
+
+def _reinit_memory(account_id: int):
+    try:
+        account = db.get_account(account_id)
+        if not account:
+            return
+        db.clear_memory(account_id)
+        db.expire_pending_actions(account_id)
+        lead = fetch_lead(account["crm_lead_id"])
+        vertical = account.get("vertical", "tourism")
+        vertical_context, vertical_signals = load_vertical(vertical)
+        assessment = run_assess(lead, vertical_context, vertical_signals)
+        initial_memory = mem_updater.init(assessment, lead, vertical_context)
+        mem_id = db.save_memory(account_id, initial_memory)
+        excluded = db.get_excluded_angles(account_id)
+        action = action_engine.determine(initial_memory, vertical_context, excluded_angles=excluded)
+        try:
+            draft = action_drafter.generate(initial_memory, action, build_rep_context())
+        except Exception:
+            draft = None
+        db.expire_pending_actions(account_id)
+        db.create_action(
+            account_id=account_id,
+            memory_id=mem_id,
+            type=action["type"],
+            priority=action["priority"],
+            reasoning=action["reasoning"],
+            payload=action,
+            draft=draft,
+        )
+    except Exception as e:
+        db.set_account_error(account_id, str(e))
+
+
 @app.post("/accounts/{account_id}/refresh")
 def refresh_account(
     background_tasks: BackgroundTasks,
