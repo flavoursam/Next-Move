@@ -21,16 +21,26 @@ You have been given a CRM lead and vertical context. Your only job here is to ex
 
 ## Task
 
-Carefully read the lead data, **including `website_signals`**. The `website_signals` field contains live data scraped directly from the company's website — treat this as ground truth, not an assumption.
+Carefully read the lead data. **CRM data is always the primary source.** Website signals are a supplementary check — useful when CRM data is thin, but never a substitute for what the rep has actually learned from the relationship.
 
-Key website signals to factor in:
-- `detected_software`: booking software actively embedded on their site (e.g. Rezdy, Checkfront) — this is a confirmed fact, not a CRM assumption
-- `has_direct_booking`: whether a booking widget is present — if False and `has_book_now_cta` is also False, the business may be taking bookings offline or via phone only
-- `no_booking_detected`: a strong signal — if True, the prospect has no online booking capability at all, which is a major pain point
-- `ota_review_links`: OTA platforms linked from their site (Viator, GetYourGuide, etc.) — these are review badges or listing links only, **not booking software**. Do not treat them as evidence of a booking system. They do confirm OTA presence/dependency.
-- `fetch_error`: if set, the website could not be reached — note this as a gap
+### How to treat CRM data (primary)
 
-Cross-reference website signals against CRM data. If they conflict (e.g. CRM says "uses Rezdy" but website shows FareHarbor), flag it.
+CRM notes, call history, email threads, objections raised, deal context, and contact details are ground truth. Any signal that comes from an actual interaction with the prospect outweighs anything observed on their website.
+
+Place CRM-derived signals in `key_signals`. These are the signals that will drive strategy and angle selection downstream.
+
+### How to treat website signals (supplementary)
+
+Website signals (`website_signals` in the lead data) are automated scrape observations — useful background context, not confirmed facts about the business's situation or intent.
+
+- `detected_software`: booking software found on the site — note it, but do not treat it as definitive (plugins can be inactive or miscategorised)
+- `has_direct_booking` / `no_booking_detected`: absence of a booking widget is an observation, not a confirmed pain point — the operator may take bookings by phone, via OTA, or through a channel not visible on the public site
+- `ota_review_links`: OTA badges or listing links — confirms OTA presence, not booking software
+- `fetch_error`: website could not be reached — note as a gap
+
+**Website observations belong in `likely_pain_points` as assumptions** (labelled ASSUMPTION), not in `key_signals`. The only exception: if `detected_software` matches or conflicts with something already mentioned in the CRM — flag that conflict in `key_signals` as it is genuinely informative.
+
+Cross-reference website signals against CRM data. If they conflict, flag it. If the CRM is silent and the website shows something notable, note it as a weak assumption only.
 
 Extract facts, identify signals, and note gaps. Label anything that is an assumption rather than a stated fact.
 
@@ -46,10 +56,10 @@ Return this JSON structure:
     "last_activity_summary": "one sentence describing what the last interaction was"
   },
   "key_signals": [
-    "specific, real signals from the CRM data relevant to this vertical — e.g. 'Uses Rezdy, no direct booking channel visible on website'"
+    "CRM-sourced signals only — things learned from actual interactions, notes, deal history, or confirmed facts about the account"
   ],
   "likely_pain_points": [
-    "ASSUMPTION: pain point inferred from vertical knowledge and signals — label all assumptions"
+    "ASSUMPTION: pain point inferred from vertical knowledge, CRM signals, or website observations — label all assumptions and note the source (e.g. 'ASSUMPTION (website): no booking widget visible on site')"
   ],
   "contacts": [
     {

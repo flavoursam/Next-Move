@@ -75,6 +75,8 @@ def process_accounts():
     from signals import ingestor
     from memory import updater as mem_updater
     from actions import engine as action_engine
+    from actions import drafter as action_drafter
+    from run import build_rep_context
     import json
 
     accounts = db.get_active_accounts()
@@ -111,6 +113,11 @@ def process_accounts():
             db.mark_signals_processed(account_id)
 
             action = action_engine.determine(updated_memory, vertical_context)
+            rep_context = build_rep_context()
+            try:
+                draft = action_drafter.generate(updated_memory, action, rep_context)
+            except Exception:
+                draft = None
             db.expire_pending_actions(account_id)
             db.create_action(
                 account_id=account_id,
@@ -119,6 +126,7 @@ def process_accounts():
                 priority=action["priority"],
                 reasoning=action["reasoning"],
                 payload=action,
+                draft=draft,
             )
 
             if action.get("type") != "wait" or not action.get("wait_days"):

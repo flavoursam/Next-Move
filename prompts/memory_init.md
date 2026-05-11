@@ -34,8 +34,12 @@ The memory document must follow this exact JSON structure:
     {
       "point": "specific pain point",
       "confidence": "high | medium | low",
+      "source": "crm_conversation | crm_signal | website_observation | vertical_inference",
       "first_noted": "YYYY-MM-DD",
-      "last_confirmed": "YYYY-MM-DD"
+      "last_confirmed": "YYYY-MM-DD",
+      "used_as_angle": false,
+      "last_used_as_angle": null,
+      "outcome": null
     }
   ],
 
@@ -95,7 +99,14 @@ The memory document must follow this exact JSON structure:
 
 Rules:
 - buying_readiness.score is 0.0–1.0 (0 = no fit / totally cold, 1 = ready to buy today)
-- pain_points must reference specific evidence from the CRM data, not generic assumptions
+- pain_points must reference specific evidence — see confidence rules below
 - If there are no objections on record, return an empty array — do not invent them
 - last_updated must be today's date
 - Return valid JSON only. No markdown. No preamble. Start with { and end with }.
+
+Pain point confidence rules — apply these strictly:
+- confidence "high": the prospect themselves confirmed or described this pain in a conversation, call note, or email
+- confidence "medium": a strong CRM signal suggests it (e.g. deal notes mention a specific problem, current software is a known competitor with documented gaps, objection history implies it)
+- confidence "low": inferred from website observations only (no booking widget, Book Now CTA mismatch, OTA badges) OR inferred purely from vertical generalisation with no account-specific evidence
+
+Website-only observations (no_booking_detected, has_book_now_cta mismatch, detected_software from scrape) must always be confidence "low". They are weak inferences about the outside of the business, not confirmed pain. Do not promote them to medium or high regardless of how prominent the signal appears.

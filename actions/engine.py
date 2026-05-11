@@ -26,18 +26,23 @@ def _fill(template: str, **kwargs) -> str:
     return template
 
 
-def determine(account_memory: dict, vertical_context: str) -> dict:
+def determine(account_memory: dict, vertical_context: str, excluded_angles: list[str] | None = None) -> dict:
     """
     Given the current account memory, return a next-best-action recommendation.
 
     Returns dict with keys: type, priority, reasoning, contact_name, contact_email,
-    contact_phone, brief, strategy, wait_days
+    contact_phone, brief, primary_pain_point, strategy, wait_days
     """
+    excluded = excluded_angles or []
+    excluded_text = (
+        "\n".join(f"- {a}" for a in excluded) if excluded else "None — no restrictions apply."
+    )
     prompt = _fill(
         _load_prompt(),
         account_memory=account_memory,
         vertical_context=vertical_context,
         today=date.today().isoformat(),
+        excluded_angles=excluded_text,
     )
 
     response = _client.messages.create(
@@ -67,6 +72,7 @@ def determine(account_memory: dict, vertical_context: str) -> dict:
         "contact_email": result.get("contact_email"),
         "contact_phone": result.get("contact_phone"),
         "brief": result.get("brief", ""),
+        "primary_pain_point": result.get("primary_pain_point"),
         "strategy": result.get("strategy", "discovery"),
         "wait_days": result.get("wait_days"),
     }

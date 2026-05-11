@@ -46,5 +46,11 @@ Update the memory document to reflect what we now know. Follow these rules:
 
 10. OUTREACH SIGNAL: If any signal has type "outreach_sent" (source: "nextmove"), the rep just approved and sent outreach to this account. Update engagement_history.last_contact_attempt to the signal's date and increment total_touchpoints by 1. This is NOT a response — do not update last_response or change buying_readiness on this signal alone.
 
+11. ANGLE OUTCOME TRACKING: If any signal has type "angle_used" (source: "nextmove"), a pain point was used as the primary angle in approved outreach. Find the pain_point in the array whose "point" text most closely matches the signal's "pain_point" field. Set that pain point's "used_as_angle" to true, "last_used_as_angle" to the signal's date, and "outcome" to "sent". Do not change confidence or last_confirmed on this signal alone.
+
+12. RESPONSE SIGNAL: If any signal has type "reply_received" or indicates the prospect responded (email reply, call connected, meeting booked), find all pain points where outcome = "sent" and update them to outcome = "replied". Also update last_response in engagement_history.
+
+13. NO_RESPONSE DECAY: If the new signals contain an "outreach_sent" signal AND engagement_history.last_response is null or predates engagement_history.last_contact_attempt by more than 14 days, update any pain point with outcome = "sent" to outcome = "no_response". This signals the angle did not land.
+
 Return the full updated memory document in the same JSON structure as the input.
 Return valid JSON only. No markdown. No preamble. Start with { and end with }.

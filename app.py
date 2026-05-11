@@ -412,6 +412,9 @@ def account_detail(
     request: Request,
     account_id: int,
     user_name: Optional[str] = Cookie(default=None),
+    approved: Optional[str] = None,
+    angle: Optional[str] = None,
+    rethink_exhausted: Optional[str] = None,
 ):
     if not user_name:
         return RedirectResponse("/identity")
@@ -423,9 +426,21 @@ def account_detail(
     mem_row = db.get_current_memory(account_id)
     memory = mem_row["memory"] if mem_row else None
     pending_action = db.get_pending_action(account_id)
+
+    if pending_action and not pending_action.get("draft") and mem_row:
+        try:
+            draft = action_drafter.generate(mem_row["memory"], pending_action["payload"], build_rep_context())
+            with db.get_conn() as conn:
+                conn.execute("UPDATE actions SET draft = ? WHERE id = ?",
+                             (json.dumps(draft), pending_action["id"]))
+            pending_action["draft"] = draft
+        except Exception:
+            pass
+
     fresh_action = db.get_fresh_action(account_id)
     action_history = db.get_action_history(account_id)
     signals = db.get_all_signals(account_id)[:20]
+    rethink_count = db.get_rethink_count(account_id)
 
     return templates.TemplateResponse(request, "account.html", {
         "user": _get_user(user_name),
@@ -435,6 +450,11 @@ def account_detail(
         "fresh_action": fresh_action,
         "action_history": action_history,
         "signals": signals,
+        "rethink_count": rethink_count,
+        "max_rethinks": MAX_RETHINKS,
+        "just_approved": approved == "1",
+        "approved_angle": angle or "",
+        "rethink_exhausted": rethink_exhausted == "1",
     })
 
 
@@ -455,17 +475,21 @@ def approve_account_action(
     if action_type in ("send_email", "call", "voicemail"):
         background_tasks.add_task(_generate_and_log_draft, account_id, action_id)
         db.approve_action(action_id)
-        # Log outreach immediately to memory (memory-sourced actions only)
         if not is_fresh:
             contact = action["payload"].get("contact_name")
-            background_tasks.add_task(_log_outreach_to_memory, account_id, action_type, contact)
+            pain_point = action["payload"].get("primary_pain_point")
+            background_tasks.add_task(_log_outreach_to_memory, account_id, action_type, contact, pain_point)
     else:
         db.approve_action(action_id)
 
-    return RedirectResponse(f"/accounts/{account_id}", status_code=303)
+    angle_label = action["payload"].get("primary_pain_point", "")
+    redirect_url = f"/accounts/{account_id}?approved=1"
+    if angle_label:
+        redirect_url += f"&angle={angle_label[:80]}"
+    return RedirectResponse(redirect_url, status_code=303)
 
 
-def _log_outreach_to_memory(account_id: int, action_type: str, contact_name: str | None):
+def _log_outreach_to_memory(account_id: int, action_type: str, contact_name: str | None, pain_point: str | None = None):
     """Directly update memory to record that outreach was sent, without a Claude call."""
     try:
         mem_row = db.get_current_memory(account_id)
@@ -479,6 +503,16 @@ def _log_outreach_to_memory(account_id: int, action_type: str, contact_name: str
         engagement["last_contact_attempt"] = today
         engagement["total_touchpoints"] = engagement.get("total_touchpoints", 0) + 1
         memory["engagement_history"] = engagement
+
+        # Mark the used angle on the matching pain point
+        if pain_point:
+            for pp in memory.get("pain_points", []):
+                if pp.get("point") == pain_point:
+                    pp["used_as_angle"] = True
+                    pp["last_used_as_angle"] = today
+                    pp["outcome"] = "sent"
+                    break
+
         memory["last_updated"] = today
 
         db.save_memory(account_id, memory)
@@ -487,6 +521,12 @@ def _log_outreach_to_memory(account_id: int, action_type: str, contact_name: str
             "action_type": action_type,
             "note": f"Outreach approved via NextMove ({action_type})" + (f" to {contact_name}" if contact_name else ""),
         })
+        if pain_point:
+            db.save_signal(account_id, "nextmove", "angle_used", {
+                "date": today,
+                "pain_point": pain_point,
+                "action_type": action_type,
+            })
     except Exception:
         pass
 
@@ -544,6 +584,72 @@ def reject_account_action(account_id: int, action_id: int):
     if action and action["account_id"] == account_id:
         db.reject_action(action_id)
     return RedirectResponse(f"/accounts/{account_id}", status_code=303)
+
+
+MAX_RETHINKS = 3
+
+@app.post("/accounts/{account_id}/actions/{action_id}/rethink")
+def rethink_account_action(
+    background_tasks: BackgroundTasks,
+    account_id: int,
+    action_id: int,
+):
+    action = db.get_action(action_id)
+    if not action or action["account_id"] != account_id:
+        return HTMLResponse("Action not found", status_code=404)
+
+    rethink_count = db.get_rethink_count(account_id)
+    if rethink_count >= MAX_RETHINKS:
+        return RedirectResponse(f"/accounts/{account_id}?rethink_exhausted=1", status_code=303)
+
+    db.mark_action_rethink(action_id)
+    db.set_account_rethinking(account_id, True)
+    background_tasks.add_task(_run_rethink, account_id)
+    return RedirectResponse(f"/accounts/{account_id}", status_code=303)
+
+
+def _run_rethink(account_id: int):
+    """Generate a new action+draft for an account, excluding previously tried angles."""
+    try:
+        account = db.get_account(account_id)
+        if not account:
+            return
+
+        mem_row = db.get_current_memory(account_id)
+        if not mem_row:
+            db.set_account_rethinking(account_id, False)
+            return
+
+        vertical = account.get("vertical", "tourism")
+        try:
+            vertical_context, _ = load_vertical(vertical)
+        except FileNotFoundError:
+            db.set_account_rethinking(account_id, False)
+            return
+
+        excluded = db.get_excluded_angles(account_id)
+        action = action_engine.determine(mem_row["memory"], vertical_context, excluded_angles=excluded)
+
+        try:
+            draft = action_drafter.generate(mem_row["memory"], action, build_rep_context())
+        except Exception:
+            draft = None
+
+        mem_id = mem_row["id"]
+        db.expire_pending_actions(account_id)
+        db.create_action(
+            account_id=account_id,
+            memory_id=mem_id,
+            type=action["type"],
+            priority=action["priority"],
+            reasoning=action["reasoning"],
+            payload=action,
+            draft=draft,
+        )
+    except Exception:
+        pass
+    finally:
+        db.set_account_rethinking(account_id, False)
 
 
 @app.post("/accounts/{account_id}/refresh")

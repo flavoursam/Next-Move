@@ -22,6 +22,13 @@ Reason about the actual state of this account: what do we know, what changed, wh
 
 ---
 
+## Excluded Angles
+{{excluded_angles}}
+
+These pain points have already been used as the primary angle in recent outreach to this account, or were explicitly rejected by the rep. Do not use any of them as the primary angle in your recommendation. If the excluded list is empty, no restriction applies.
+
+---
+
 ## Action Types
 
 Choose one:
@@ -45,6 +52,14 @@ Choose one:
 - If there is a DNC contact, route to another contact or flag as escalate_human if no safe contact exists
 - If the account has no identifiable decision maker → discovery approach, not pitch
 
+## Angle selection rules
+
+- Do not use any pain point listed in Excluded Angles as the primary angle
+- If the last outreach went unanswered (engagement_history.last_contact_attempt is set and last_response is null or predates it), choose a different angle AND consider a different channel — silence is a signal to change approach, not repeat it
+- If all available pain points are excluded and no fresh angle exists, route to strategy = "discovery" with type = "call" or "send_email" — the goal becomes learning, not pitching
+- Prefer pain points with outcome = null (never used) over those with outcome = "no_response"
+- Never repeat an angle with outcome = "no_response" unless no other option exists and you explain why in reasoning
+
 ## Output format
 
 Return this JSON structure:
@@ -57,6 +72,7 @@ Return this JSON structure:
   "contact_email": "string or null",
   "contact_phone": "string or null",
   "brief": "1-2 sentences on what the message should accomplish and the key point to make — used to generate the actual draft",
+  "primary_pain_point": "exact text of the pain point from memory being used as the primary angle — null if action type is wait/monitor/deprioritize",
   "strategy": "challenger | discovery | mid_market",
   "wait_days": null
 }
@@ -64,5 +80,6 @@ Return this JSON structure:
 - wait_days is only populated when type = "wait" — set it to the number of days before re-evaluating
 - brief should be specific: not "follow up" but "lead with the OTA commission cost and ask if they have a peak season review coming"
 - reasoning must reference actual signals from the memory, not generic observations
+- primary_pain_point must be copied verbatim from the pain_points array in memory — do not paraphrase
 
 Return valid JSON only. No markdown. No preamble. Start with { and end with }.

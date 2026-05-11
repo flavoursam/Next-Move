@@ -140,24 +140,47 @@
         <div class="draft-box" style="font-size: 13px;">{{ md.call.script or md.call.voicemail }}</div>
         {% endif %}
       </div>
-      {% else %}
-      <div style="border-top: 1px solid var(--border); padding: 16px 0; color: var(--muted); font-size: 12px; margin-bottom: 14px; line-height: 1.6;">
-        No new signals since the last outreach — the recommendation above still stands. Hit <strong>↺ Run</strong> on the right to generate a fresh draft for comparison.
-      </div>
       {% endif %}
 
       <p style="font-size: 12px; color: var(--muted); line-height: 1.55; margin-bottom: 14px; border-top: 1px solid var(--border); padding-top: 10px;">{{ display_action.reasoning }}</p>
 
       {% if display_action.status == 'pending' %}
-      <div style="display: flex; gap: 8px;">
+      {% if account.rethinking %}
+      <div style="display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; padding: 10px 0;">
+        <span class="spinner" style="width: 13px; height: 13px; border-width: 2px;"></span>
+        Finding a different angle...
+      </div>
+      {% else %}
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
         <form method="post" action="/accounts/{{ account.id }}/actions/{{ display_action.id }}/approve">
           <button type="submit" class="btn btn-success">
             {% if display_action.type in ['send_email', 'call', 'voicemail'] %}Approve + Send to Close{% else %}Approve{% endif %}
           </button>
         </form>
+        {% if rethink_count < max_rethinks %}
+        <form method="post" action="/accounts/{{ account.id }}/actions/{{ display_action.id }}/rethink">
+          <button type="submit" class="btn btn-secondary" title="Try a different angle ({{ max_rethinks - rethink_count }} left)">Different angle{% if rethink_count > 0 %} ({{ rethink_count }}/{{ max_rethinks }}){% endif %}</button>
+        </form>
+        {% else %}
+        <span style="font-size: 11px; color: var(--muted); align-self: center;">Max rethinks reached — try Discovery approach</span>
+        {% endif %}
         <form method="post" action="/accounts/{{ account.id }}/actions/{{ display_action.id }}/reject">
           <button type="submit" class="btn btn-secondary">Reject</button>
         </form>
+      </div>
+      {% endif %}
+      {% endif %}
+
+      {% if just_approved %}
+      <div style="margin-top: 10px; font-size: 12px; color: #059669; display: flex; align-items: center; gap: 6px;">
+        <span>✓ Sent to Close.</span>
+        {% if approved_angle %}<span style="color: var(--muted);">Angle logged: <em>{{ approved_angle }}</em></span>{% endif %}
+      </div>
+      {% endif %}
+
+      {% if rethink_exhausted %}
+      <div style="margin-top: 10px; font-size: 12px; color: var(--muted);">
+        All angles tried. The next recommendation will use a discovery approach.
       </div>
       {% endif %}
     </div>

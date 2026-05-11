@@ -23,34 +23,28 @@ You have an assessment and a selected strategy. Your job is to identify the sing
 
 Identify the ONE angle to lead with. Do not combine multiple pain points. Pick the strongest signal and build a single, specific angle from it.
 
-### Website signals as a talking point
+### Priority order for angle selection
 
-Website signals are one input — not the default angle. Always weigh them against CRM signals and choose whichever is strongest and most specific for this lead.
+Always work through this hierarchy. Stop at the first level where a real signal exists.
 
-Website observations are particularly useful when:
-- CRM data is thin and there is no strong relationship signal to build on
-- A clear, observable mismatch exists between what the website shows and what you would expect
-- You want to show the prospect you have done your homework before reaching out
+**1. CRM relationship signals (strongest)** — anything from an actual interaction: a pain point the rep has already uncovered, an objection raised, a prior conversation thread, a trigger event (ownership change, new tour launch, competitor mentioned), a timing signal from notes, a response or non-response pattern. These are the most specific and credible angles because they reflect what this specific person has actually said or done.
 
-A website mismatch is a talking point, not a strategy. It works best as a door-opener — something specific you noticed that invites a response — not as the main commercial argument.
+**2. CRM deal/account signals (strong)** — deal size, days since last activity, lead status, current software explicitly mentioned in the CRM, known OTA dependency stated in notes. Concrete and account-specific, but less personal than relationship signals.
 
-**Mismatches worth considering (use only when genuinely present):**
+**3. Vertical/timing context (moderate)** — seasonal timing, industry-wide patterns, competitor dynamics relevant to this operator type. Useful for "why now" framing but not specific enough to stand alone as an angle.
 
-- **Book Now CTA but no booking software detected** (`has_book_now_cta: true`, `has_direct_booking: false`) — something to gently surface: "I saw a Book Now button but couldn't find where it goes."
-- **No booking capability at all** (`no_booking_detected: true`) — confirms the direct booking gap is real and visible from the outside.
-- **Competitor software on site** (`detected_software` is Rezdy, Checkfront, Bokun, etc.) — useful context. Do not pitch against it. It may surface a question about how it is working for them.
-- **OTA badges prominent, no direct booking widget** — OTA dependency is visible from the outside. Useful supporting signal, rarely a standalone angle.
-- **CRM says one software, website shows another** — worth noting as a gap in what we know, not as an angle in itself.
+**4. Website observations (weak — last resort only)** — automated scrape data such as no booking widget detected, Book Now CTA with no booking software, OTA badges visible. Use a website observation as the primary angle ONLY when levels 1–3 yield nothing concrete. A website observation is a cold door-opener, not a commercial argument.
 
-If the CRM has a stronger signal — a prior conversation, a pain point already surfaced, a trigger event, a relationship — lead with that instead.
+**Before selecting a website observation as your angle:** explicitly confirm that the assessment contains no CRM relationship signals, no CRM deal signals, and no usable vertical timing. If any of those exist — even weakly — use them instead.
 
-### General rules
+### Rules
 
 - The angle must be explainable in one sentence
 - The claim must be proportionate to your evidence — weak signals = weak claims
-- "Why now" must be grounded in something real (timing, stale deal, competitor signal, season) — not invented urgency
+- "Why now" must be grounded in something real — not invented urgency
 - Avoid vague claims: "improve operations", "grow bookings", "save time" — these are not angles
-- A website observation is not an accusation — frame it as something you noticed, not something you know
+- A website observation is not an accusation — if you must use one, frame it as something you noticed, not something you know
+- If the only available angle is a generic vertical assumption with no specific signal behind it, set `claim_strength` to "weak" and route toward a discovery approach rather than a pitch
 
 Return this JSON structure:
 

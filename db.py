@@ -132,6 +132,7 @@ def init_db():
         for migration in [
             "ALTER TABLE actions ADD COLUMN source TEXT NOT NULL DEFAULT 'memory'",
             "ALTER TABLE accounts ADD COLUMN fresh_running INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE accounts ADD COLUMN rethinking INTEGER NOT NULL DEFAULT 0",
         ]:
             try:
                 conn.execute(migration)
@@ -539,6 +540,63 @@ def set_account_fresh_running(account_id: int, running: bool):
         )
 
 
+def set_account_rethinking(account_id: int, rethinking: bool):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE accounts SET rethinking = ? WHERE id = ?",
+            (1 if rethinking else 0, account_id),
+        )
+
+
+def get_rethink_count(account_id: int) -> int:
+    """Count how many rethink actions exist since the last approved/rejected action."""
+    with get_conn() as conn:
+        row = conn.execute(
+            """SELECT COUNT(*) FROM actions
+               WHERE account_id = ? AND source = 'memory' AND status = 'rethink'
+               AND id > COALESCE(
+                 (SELECT MAX(id) FROM actions
+                  WHERE account_id = ? AND source = 'memory'
+                  AND status IN ('approved', 'rejected')), 0
+               )""",
+            (account_id, account_id),
+        ).fetchone()
+        return row[0] if row else 0
+
+
+def get_excluded_angles(account_id: int) -> list[str]:
+    """Return pain points used or declined since the last approved/rejected action."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT payload FROM actions
+               WHERE account_id = ? AND source = 'memory' AND status IN ('rethink', 'pending')
+               AND id > COALESCE(
+                 (SELECT MAX(id) FROM actions
+                  WHERE account_id = ? AND source = 'memory'
+                  AND status IN ('approved', 'rejected')), 0
+               )""",
+            (account_id, account_id),
+        ).fetchall()
+    angles = []
+    for row in rows:
+        try:
+            payload = json.loads(row["payload"]) if isinstance(row["payload"], str) else row["payload"]
+            pp = payload.get("primary_pain_point")
+            if pp and pp not in angles:
+                angles.append(pp)
+        except Exception:
+            pass
+    return angles
+
+
+def mark_action_rethink(action_id: int):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE actions SET status = 'rethink', actioned_at = ? WHERE id = ?",
+            (_now(), action_id),
+        )
+
+
 def set_account_error(account_id: int, error: str):
     with get_conn() as conn:
         conn.execute(
@@ -651,13 +709,15 @@ def create_action(
     reasoning: str,
     payload: dict,
     source: str = "memory",
+    draft: dict | None = None,
 ) -> int:
     with get_conn() as conn:
         cur = conn.execute(
             """INSERT INTO actions
-               (account_id, memory_id, type, priority, reasoning, payload, source, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (account_id, memory_id, type, priority, reasoning, json.dumps(payload), source, _now()),
+               (account_id, memory_id, type, priority, reasoning, payload, source, draft, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (account_id, memory_id, type, priority, reasoning, json.dumps(payload), source,
+             json.dumps(draft) if draft else None, _now()),
         )
         return cur.lastrowid
 
