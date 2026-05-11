@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Runs — NextMove{% endblock %}
+
+{% block content %}
+
+<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+  <h1 class="page-title" style="margin-bottom: 0;">Runs</h1>
+  <a href="/" class="btn btn-primary">+ New Run</a>
+</div>
+
+{% if not runs %}
+<div class="card" style="text-align: center; padding: 48px; color: var(--muted);">
+  <p style="font-size: 15px; margin-bottom: 12px;">No runs yet.</p>
+  <a href="/" class="btn btn-primary">Run your first lead</a>
+</div>
+{% else %}
+<div class="card" style="padding: 0; overflow: hidden;">
+  <table class="table" style="font-size: 13px;">
+    <thead>
+      <tr>
+        <th>Company</th>
+        <th>Run</th>
+        <th>Lense</th>
+        <th>Software</th>
+        <th>Angle</th>
+        <th>Action</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for run in runs %}
+      {% set a = run.payload.get('assessment', {}) %}
+      {% set ang = run.payload.get('angle_result', {}) %}
+      {% set act = run.payload.get('action_result', {}) %}
+      {% set software = a.get('deal_context', {}).get('current_software') or '' %}
+      {% set lense = a.get('activity_type') or '' %}
+      {% set angle_text = ang.get('primary_pain_point') or '—' %}
+      <tr>
+        <td style="white-space: nowrap;">
+          <a href="/runs/{{ run.action_id }}" style="font-weight: 600; color: var(--text); text-decoration: none;">{{ run.company_name }}</a>
+        </td>
+        <td style="white-space: nowrap;">
+          <span class="time-ago meta" data-ts="{{ run.last_run_at }}">{{ run.last_run_at[:10] }}</span>
+        </td>
+        <td style="white-space: nowrap;">
+          {% if lense %}
+          <span class="meta">{{ lense | replace("_", " ") | title }}</span>
+          {% else %}
+          <span class="meta">—</span>
+          {% endif %}
+        </td>
+        <td style="white-space: nowrap;">
+          {% if software %}
+          <span class="meta" style="font-family: monospace; font-size: 11px;">{{ software.split(',')[0] }}</span>
+          {% else %}
+          <span class="meta">—</span>
+          {% endif %}
+        </td>
+        <td style="max-width: 220px;">
+          <span style="color: var(--text);" title="{{ angle_text }}">
+            {{ angle_text[:50] }}{% if angle_text | length > 50 %}…{% endif %}
+          </span>
+        </td>
+        <td style="white-space: nowrap;">
+          {% if act.get('recommended_action') %}
+          <span class="badge badge-normal">{{ act.recommended_action | replace("_", " ") | title }}</span>
+          {% else %}
+          <span class="meta">—</span>
+          {% endif %}
+        </td>
+        <td style="text-align: right; white-space: nowrap;">
+          <a href="/runs/{{ run.action_id }}" class="btn btn-secondary" style="font-size: 12px; padding: 3px 10px;">Run</a>
+          <a href="/accounts/{{ run.account_id }}" class="btn btn-secondary" style="font-size: 12px; padding: 3px 10px; margin-left: 4px;">Account</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<script>
+function timeAgo(dateStr) {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const s = Math.floor((now - date) / 1000);
+  if (s < 60) return s + 's ago';
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + 'm ago';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + 'h ago';
+  const d = Math.floor(h / 24);
+  if (d < 30) return d + 'd ago';
+  return Math.floor(d / 30) + 'mo ago';
+}
+document.querySelectorAll('.time-ago').forEach(el => {
+  const ts = el.getAttribute('data-ts');
+  if (ts) el.textContent = timeAgo(ts);
+});
+</script>
+
+{% endblock %}

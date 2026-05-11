@@ -6,7 +6,7 @@ A reference for understanding and managing the account memory system. Keep this 
 
 ## What is account memory?
 
-Every account in NextMove has a persistent memory document — a structured JSON file that accumulates what the system knows about the account over time. Unlike the legacy sequence pipeline (which re-reads the CRM fresh on each run), the memory system builds an evolving picture of each account.
+Every account in NextMove has a persistent memory document — a structured JSON file that accumulates what the system knows about the account over time. The memory system builds an evolving picture of each account, updated every hour from Close activity.
 
 Memory is created once when you add the account, then updated incrementally every hour as new signals arrive from Close.
 

@@ -83,7 +83,7 @@ The memory document must follow this exact JSON structure:
     "predicted_tier": null,
     "lead_qualification": "string or null",
     "fit": "string or null",
-    "operator_type": "string or null — from client_segments or primary_types e.g. 'Activity operator', 'Wildlife experience'",
+    "activity_type": "string or null — from client_segments or primary_types e.g. 'Activity operator', 'Wildlife experience'",
     "current_software": "string or null — all vendors listed, comma-separated if multiple",
     "website": "string or null",
     "location": "string or null",
@@ -128,7 +128,7 @@ Rules:
 - pain_points must reference specific evidence — see confidence rules below
 - If there are no objections on record, return an empty array — do not invent them
 - last_updated must be today's date
-- Populate account_context.tier, lead_qualification, fit, operator_type, current_software, is_former_client, client_churn_reasons, predicted_opp_value from the lead snapshot and assessment — do not leave these null if the data exists.
+- Populate account_context.tier, lead_qualification, fit, activity_type, current_software, is_former_client, client_churn_reasons, predicted_opp_value from the lead snapshot and assessment — do not leave these null if the data exists.
 - Populate digital_presence from tripadvisor_review_count, google_review_count, semrush_organic_traffic, and ota_review_links in the lead snapshot. If tripadvisor_review_count is high (200+) and the operator has no confirmed direct booking software or has OTA channels listed, add a notes entry explaining the direct booking gap.
 - Populate engagement_signals.fh_webinars_attended from the lead snapshot — this is a genuine product interest signal.
 - If am_note or sales_ops_note is present in the lead snapshot, extract any relevant facts into known_facts and any intelligence into pain_points or objections as appropriate, with source = "crm_conversation" and confidence based on the confidence rules below.

@@ -1,8 +1,12 @@
 """NextMove web app."""
 
+import asyncio
 import json
 import os
 import subprocess
+import threading
+import time
+import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Optional
@@ -12,7 +16,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import BackgroundTasks, Cookie, FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import uvicorn
@@ -22,7 +26,6 @@ import scheduler as sched
 from actions import drafter as action_drafter
 from actions import engine as action_engine
 from memory import updater as mem_updater
-from neglect import MEANINGFUL_ACTIVITY_RULES
 from pipeline.close_write import create_email_draft, create_note
 from pipeline.context_loader import load_lenses
 from pipeline.crm import fetch_lead
@@ -56,6 +59,16 @@ app = FastAPI(lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
+_run_store: dict = {}
+
+_CHANNEL_TO_TYPE = {
+    "email": "send_email",
+    "cold_call": "call",
+    "voicemail": "voicemail",
+    "linkedin": "monitor",
+    "research": "monitor",
+}
+
 
 def _get_user(user_name: str | None) -> dict | None:
     if not user_name:
@@ -81,281 +94,278 @@ def set_identity(name: str = Form(...)):
     return response
 
 
-# ─── Dashboard ────────────────────────────────────────────────────────────────
+# ─── Next Touchpoint ──────────────────────────────────────────────────────────
+
+def _add_log(run_id: str, message: str):
+    if run_id in _run_store:
+        _run_store[run_id]["logs"].append({"msg": message, "ts": time.time()})
+
+
+def _init_account(account_id: int, lead_id: str, vertical: str):
+    """Build the initial memory and first action for a new account."""
+    try:
+        lead = fetch_lead(lead_id)
+        vertical_context, vertical_signals = load_vertical(vertical)
+
+        with db.get_conn() as conn:
+            conn.execute(
+                "UPDATE accounts SET company_name = ? WHERE id = ?",
+                (lead["company_name"], account_id),
+            )
+
+        assessment = run_assess(lead, vertical_context, vertical_signals)
+        initial_memory = mem_updater.init(assessment, lead, vertical_context)
+        mem_id = db.save_memory(account_id, initial_memory)
+
+        action = action_engine.determine(initial_memory, vertical_context)
+        db.create_action(
+            account_id=account_id,
+            memory_id=mem_id,
+            type=action["type"],
+            priority=action["priority"],
+            reasoning=action["reasoning"],
+            payload=action,
+        )
+
+    except Exception as e:
+        db.set_account_error(account_id, str(e))
+
+
+def _run_neglected_pipeline(run_id: str, lead_id: str):
+    """Run the full Next Touchpoint pipeline, logging each step to _run_store."""
+    vertical = "tourism"
+    try:
+        _add_log(run_id, "Fetching CRM data from Close...")
+        vertical_context, vertical_signals = load_vertical(vertical)
+        lead = fetch_lead(lead_id)
+
+        _add_log(run_id, f"Found: {lead.get('company_name', lead_id)}")
+        _add_log(run_id, "Stage 1: Assessing lead...")
+        assessment = run_assess(lead, vertical_context, vertical_signals)
+
+        _add_log(run_id, "Stage 2: Selecting strategy...")
+        strategy_result = run_strategy(assessment)
+
+        _add_log(run_id, "Stage 3: Identifying angle...")
+        angle_result = run_angle(assessment, strategy_result)
+
+        _add_log(run_id, "Stage 4: Choosing action & contact...")
+        action_result = run_action(assessment, strategy_result, angle_result)
+
+        _add_log(run_id, "Stage 5: Drafting outreach...")
+        draft = run_draft(assessment, strategy_result, angle_result, action_result, build_rep_context())
+
+        _add_log(run_id, "Loading operator context...")
+        activity_type = assessment.get("activity_type")
+        current_software = (
+            assessment.get("deal_context", {}).get("current_software")
+            or lead.get("current_software")
+        )
+        activity_ctx, software_ctx = load_lenses(vertical, activity_type, current_software)
+
+        _add_log(run_id, "Generating discovery package...")
+        try:
+            discovery = run_discovery(assessment, angle_result, activity_ctx, software_ctx)
+        except Exception:
+            discovery = None
+
+        git_hash = _git_hash()
+
+        _add_log(run_id, "Saving to database...")
+        existing = db.get_account_by_lead_id(lead_id)
+        if existing:
+            account_id = existing["id"]
+        else:
+            account_id = db.create_account(
+                crm_lead_id=lead_id,
+                company_name=lead.get("company_name", "..."),
+                vertical=vertical,
+            )
+            threading.Thread(
+                target=_init_account, args=(account_id, lead_id, vertical), daemon=True
+            ).start()
+
+        action_type = _CHANNEL_TO_TYPE.get(
+            action_result.get("recommended_action", "email"), "send_email"
+        )
+        db.expire_fresh_actions(account_id)
+        db.create_action(
+            account_id=account_id,
+            memory_id=None,
+            type=action_type,
+            priority="normal",
+            reasoning=action_result.get("reasoning", angle_result.get("why_now", "")),
+            payload={
+                "assessment": assessment,
+                "strategy_result": strategy_result,
+                "angle_result": angle_result,
+                "action_result": action_result,
+                "draft": draft,
+                "discovery": discovery,
+                "contact_name": action_result.get("contact_name"),
+                "contact_email": action_result.get("contact_email"),
+                "contact_phone": action_result.get("contact_phone"),
+                "git_hash": git_hash,
+            },
+            source="neglected",
+        )
+
+        _run_store[run_id]["result"] = {
+            "company_name": lead.get("company_name"),
+            "lead_id": lead_id,
+            "account_id": account_id,
+            "assessment": assessment,
+            "strategy_result": strategy_result,
+            "angle_result": angle_result,
+            "action_result": action_result,
+            "draft": draft,
+            "discovery": discovery,
+            "recent_activity": lead.get("recent_activity", []),
+            "git_hash": git_hash,
+        }
+        _add_log(run_id, "Done!")
+        _run_store[run_id]["status"] = "done"
+
+    except Exception as e:
+        _run_store[run_id]["error"] = str(e)
+        _run_store[run_id]["status"] = "error"
+        _add_log(run_id, f"Error: {e}")
+
 
 @app.get("/", response_class=HTMLResponse)
-def dashboard(request: Request, user_name: Optional[str] = Cookie(default=None)):
+def next_touchpoint_page(request: Request, user_name: Optional[str] = Cookie(default=None)):
     if not user_name:
         return RedirectResponse("/identity")
-
-    user = _get_user(user_name)
-    all_seqs = db.get_all_sequences()
-
-    for seq in all_seqs:
-        seq["latest_gate"] = db.get_latest_gate_verdict(seq["id"])
-        tps = db.get_touchpoints(seq["id"])
-        seq["touchpoint_count"] = len(tps)
-
-    paused = [s for s in all_seqs if s["status"] == "paused"]
-    active = [s for s in all_seqs if s["status"] != "paused"]
-
-    return templates.TemplateResponse(request, "index.html", {
-        "user": user,
-        "paused": paused,
-        "active": active,
-    })
-
-
-# ─── New sequence ──────────────────────────────────────────────────────────────
-
-@app.get("/sequence/new", response_class=HTMLResponse)
-def new_sequence_page(request: Request, user_name: Optional[str] = Cookie(default=None)):
-    if not user_name:
-        return RedirectResponse("/identity")
-    return templates.TemplateResponse(request, "new_sequence.html", {
+    return templates.TemplateResponse(request, "neglected.html", {
         "user": _get_user(user_name),
-        "owner_name": os.getenv("REP_NAME", "the app owner"),
+        "result": None,
+        "error": None,
+        "lead_id": "",
     })
 
 
-@app.post("/sequence/new")
-def create_sequence(
+@app.post("/", response_class=HTMLResponse)
+def start_next_touchpoint(
     background_tasks: BackgroundTasks,
-    lead_id: str = Form(...),
-    vertical: str = Form(default="tourism"),
-    user_name: Optional[str] = Cookie(default=None),
-):
-    if not user_name:
-        return RedirectResponse("/identity")
-
-    user = db.get_or_create_user(user_name)
-    seq_id = db.create_sequence(
-        lead_id=lead_id.strip(),
-        company_name="...",
-        user_id=user["id"],
-        vertical=vertical,
-    )
-
-    background_tasks.add_task(_run_pipeline, seq_id, lead_id.strip(), vertical)
-    return RedirectResponse(f"/sequence/{seq_id}", status_code=303)
-
-
-def _run_pipeline(seq_id: int, lead_id: str, vertical: str):
-    """Run the 5-stage pipeline and store Touchpoint 1 in the DB."""
-    try:
-        lead = fetch_lead(lead_id)
-
-        opp_value = None
-        if lead.get("opportunities"):
-            opp_value = lead["opportunities"][0].get("value_usd")
-
-        db.update_sequence_lead_info(seq_id, lead["company_name"], opp_value)
-
-        vertical_context, vertical_signals = load_vertical(vertical)
-        rep_context = build_rep_context()
-
-        assessment = run_assess(lead, vertical_context, vertical_signals)
-        strategy = run_strategy(assessment)
-        angle = run_angle(assessment, strategy)
-        action = run_action(assessment, strategy, angle)
-        draft = run_draft(assessment, strategy, angle, action, rep_context)
-
-        db.create_touchpoint(
-            sequence_id=seq_id,
-            number=1,
-            lead_snapshot=lead,
-            assessment=assessment,
-            strategy=strategy,
-            angle=angle,
-            action=action,
-            draft=draft,
-        )
-
-        db.update_sequence_status(seq_id, "pending")
-
-    except Exception as e:
-        db.update_sequence_error(seq_id, str(e))
-
-
-# ─── Sequence detail ──────────────────────────────────────────────────────────
-
-@app.get("/sequence/{seq_id}", response_class=HTMLResponse)
-def sequence_detail(
     request: Request,
-    seq_id: int,
+    lead_id: str = Form(...),
     user_name: Optional[str] = Cookie(default=None),
 ):
     if not user_name:
         return RedirectResponse("/identity")
 
-    seq = db.get_sequence(seq_id)
-    if not seq:
-        return HTMLResponse("Sequence not found", status_code=404)
+    run_id = str(uuid.uuid4())[:8]
+    _run_store[run_id] = {"status": "running", "logs": [], "result": None, "error": None}
+    background_tasks.add_task(_run_neglected_pipeline, run_id, lead_id.strip())
+    return RedirectResponse(f"/run/{run_id}", status_code=303)
 
-    raw_touchpoints = db.get_touchpoints(seq_id)
-    gate_verdicts = db.get_gate_verdicts(seq_id)
 
-    touchpoints = []
-    for tp in raw_touchpoints:
-        t = dict(tp)
-        for field in ["lead_snapshot", "assessment", "strategy", "angle", "action", "draft"]:
-            if t.get(field):
-                try:
-                    t[field] = json.loads(t[field])
-                except Exception:
-                    pass
-        touchpoints.append(t)
-
-    last_tp = touchpoints[-1] if touchpoints else None
-
-    return templates.TemplateResponse(request, "sequence.html", {
+@app.get("/run/{run_id}", response_class=HTMLResponse)
+def run_loading_page(
+    request: Request,
+    run_id: str,
+    user_name: Optional[str] = Cookie(default=None),
+):
+    if not user_name:
+        return RedirectResponse("/identity")
+    store = _run_store.get(run_id)
+    if not store:
+        return HTMLResponse("Run not found", status_code=404)
+    if store["status"] == "done":
+        return templates.TemplateResponse(request, "neglected.html", {
+            "user": _get_user(user_name),
+            "result": store["result"],
+            "error": None,
+            "lead_id": store["result"]["lead_id"],
+        })
+    if store["status"] == "error":
+        return templates.TemplateResponse(request, "neglected.html", {
+            "user": _get_user(user_name),
+            "result": None,
+            "error": store["error"],
+            "lead_id": "",
+        })
+    return templates.TemplateResponse(request, "run_loading.html", {
         "user": _get_user(user_name),
-        "seq": seq,
-        "touchpoints": touchpoints,
-        "gate_verdicts": gate_verdicts,
-        "last_tp": last_tp,
+        "run_id": run_id,
     })
 
 
-@app.post("/sequence/{seq_id}/approve/{tp_id}")
-def approve_touchpoint(
-    seq_id: int,
-    tp_id: int,
-    edited_content: Optional[str] = Form(default=None),
-    user_name: Optional[str] = Cookie(default=None),
-):
-    tp = db.get_touchpoint(tp_id)
-    if not tp:
-        return HTMLResponse("Touchpoint not found", status_code=404)
+@app.get("/run/{run_id}/stream")
+async def run_stream(run_id: str):
+    async def generate():
+        last_idx = 0
+        while True:
+            store = _run_store.get(run_id)
+            if not store:
+                yield 'data: {"error": "not found"}\n\n'
+                return
+            logs = store["logs"]
+            while last_idx < len(logs):
+                yield f"data: {json.dumps(logs[last_idx])}\n\n"
+                last_idx += 1
+            if store["status"] in ("done", "error"):
+                yield f"event: done\ndata: /run/{run_id}\n\n"
+                return
+            await asyncio.sleep(0.3)
 
-    tp = dict(tp)
-    draft = json.loads(tp["draft"]) if tp.get("draft") else {}
-    action = json.loads(tp["action"]) if tp.get("action") else {}
-    lead_snapshot = json.loads(tp["lead_snapshot"]) if tp.get("lead_snapshot") else {}
-
-    lead_id = lead_snapshot.get("lead_id", "")
-    action_type = action.get("recommended_action", "email")
-    content = (edited_content or "").strip() or None
-    close_activity_id = None
-
-    if action_type == "email":
-        email_data = draft.get("email") or {}
-        subject = email_data.get("subject", "")
-        body = content or email_data.get("body", "")
-        close_activity_id = create_email_draft(
-            lead_id,
-            action.get("contact_email"),
-            subject,
-            body,
-        )
-
-    elif action_type in ("cold_call", "voicemail"):
-        call_data = draft.get("call") or {}
-        script = content or call_data.get("script") or call_data.get("voicemail") or ""
-        tp_num = tp["number"]
-        label = "Call Script" if action_type == "cold_call" else "Voicemail Script"
-        close_activity_id = create_note(
-            lead_id,
-            f"[NextMove {label} — Touchpoint {tp_num}]\n\n{script}",
-        )
-
-    elif action_type == "linkedin":
-        li_data = draft.get("linkedin") or {}
-        message = content or li_data.get("message", "")
-        close_activity_id = create_note(
-            lead_id,
-            f"[NextMove LinkedIn — Touchpoint {tp['number']}]\n\n{message}",
-        )
-
-    db.approve_touchpoint(tp_id, close_activity_id, edited_content)
-    db.update_sequence_status(seq_id, "active")
-    db.update_last_checked(seq_id, _now())
-
-    return RedirectResponse(f"/sequence/{seq_id}", status_code=303)
-
-
-@app.post("/sequence/{seq_id}/reject/{tp_id}")
-def reject_touchpoint(seq_id: int, tp_id: int):
-    db.reject_touchpoint(tp_id)
-    db.update_sequence_status(seq_id, "cancelled")
-    return RedirectResponse(f"/sequence/{seq_id}", status_code=303)
-
-
-@app.post("/sequence/{seq_id}/next")
-def generate_next_touchpoint(
-    background_tasks: BackgroundTasks,
-    seq_id: int,
-    user_name: Optional[str] = Cookie(default=None),
-):
-    seq = db.get_sequence(seq_id)
-    if not seq:
-        return HTMLResponse("Not found", status_code=404)
-
-    last_tp = db.get_last_touchpoint(seq_id)
-    next_number = (last_tp["number"] + 1) if last_tp else 1
-
-    db.update_sequence_status(seq_id, "generating")
-    background_tasks.add_task(
-        _run_pipeline_touchpoint,
-        seq_id,
-        seq["lead_id"],
-        seq["vertical"],
-        next_number,
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
-    return RedirectResponse(f"/sequence/{seq_id}", status_code=303)
 
+# ─── Runs list ────────────────────────────────────────────────────────────────
 
-def _run_pipeline_touchpoint(seq_id: int, lead_id: str, vertical: str, number: int):
-    """Generate a subsequent touchpoint for an existing sequence."""
-    try:
-        lead = fetch_lead(lead_id)
-        vertical_context, vertical_signals = load_vertical(vertical)
-        rep_context = build_rep_context()
-
-        assessment = run_assess(lead, vertical_context, vertical_signals)
-        strategy = run_strategy(assessment)
-        angle = run_angle(assessment, strategy)
-        action = run_action(assessment, strategy, angle)
-        draft = run_draft(assessment, strategy, angle, action, rep_context)
-
-        db.create_touchpoint(
-            sequence_id=seq_id,
-            number=number,
-            lead_snapshot=lead,
-            assessment=assessment,
-            strategy=strategy,
-            angle=angle,
-            action=action,
-            draft=draft,
-        )
-
-        db.update_sequence_status(seq_id, "pending")
-    except Exception as e:
-        db.update_sequence_error(seq_id, str(e))
-
-
-# ─── Accounts (new intelligence system) ──────────────────────────────────────
-
-@app.get("/accounts", response_class=HTMLResponse)
-def accounts_list(request: Request, user_name: Optional[str] = Cookie(default=None)):
+@app.get("/runs", response_class=HTMLResponse)
+def runs_list(request: Request, user_name: Optional[str] = Cookie(default=None)):
     if not user_name:
         return RedirectResponse("/identity")
-
-    accounts = db.get_all_accounts()
-    for acc in accounts:
-        acc["pending_action"] = db.get_pending_action(acc["id"])
-        mem = db.get_current_memory(acc["id"])
-        acc["memory_summary"] = mem["memory"].get("summary", "") if mem else None
-        acc["memory_version"] = mem["memory"].get("memory_version", 0) if mem else 0
-        last_run = db.get_latest_neglected_run(acc["id"])
-        acc["last_neglected_run"] = last_run
-
-    return templates.TemplateResponse(request, "accounts.html", {
+    runs = db.get_runs_list()
+    return templates.TemplateResponse(request, "runs.html", {
         "user": _get_user(user_name),
-        "accounts": accounts,
+        "runs": runs,
     })
 
+
+@app.get("/runs/{action_id}", response_class=HTMLResponse)
+def run_detail(
+    request: Request,
+    action_id: int,
+    user_name: Optional[str] = Cookie(default=None),
+):
+    if not user_name:
+        return RedirectResponse("/identity")
+    action = db.get_action(action_id)
+    if not action or action.get("source") not in ("neglected", "fresh"):
+        return HTMLResponse("Run not found", status_code=404)
+    account = db.get_account(action["account_id"])
+    if not account:
+        return HTMLResponse("Account not found", status_code=404)
+    p = action["payload"]
+    result = {
+        "company_name": account["company_name"],
+        "lead_id": account["crm_lead_id"],
+        "account_id": account["id"],
+        "assessment": p.get("assessment", {}),
+        "strategy_result": p.get("strategy_result", {}),
+        "angle_result": p.get("angle_result", {}),
+        "action_result": p.get("action_result", {}),
+        "draft": p.get("draft"),
+        "discovery": p.get("discovery"),
+        "recent_activity": [],
+        "git_hash": p.get("git_hash", ""),
+    }
+    return templates.TemplateResponse(request, "neglected.html", {
+        "user": _get_user(user_name),
+        "result": result,
+        "error": None,
+        "lead_id": account["crm_lead_id"],
+    })
+
+
+# ─── Accounts ─────────────────────────────────────────────────────────────────
 
 @app.get("/accounts/new", response_class=HTMLResponse)
 def new_account_page(request: Request, user_name: Optional[str] = Cookie(default=None)):
@@ -390,36 +400,6 @@ def create_account(
 
     background_tasks.add_task(_init_account, account_id, lead_id, vertical)
     return RedirectResponse(f"/accounts/{account_id}", status_code=303)
-
-
-def _init_account(account_id: int, lead_id: str, vertical: str):
-    """Build the initial memory and first action for a new account."""
-    try:
-        lead = fetch_lead(lead_id)
-        vertical_context, vertical_signals = load_vertical(vertical)
-
-        with db.get_conn() as conn:
-            conn.execute(
-                "UPDATE accounts SET company_name = ? WHERE id = ?",
-                (lead["company_name"], account_id),
-            )
-
-        assessment = run_assess(lead, vertical_context, vertical_signals)
-        initial_memory = mem_updater.init(assessment, lead, vertical_context)
-        mem_id = db.save_memory(account_id, initial_memory)
-
-        action = action_engine.determine(initial_memory, vertical_context)
-        db.create_action(
-            account_id=account_id,
-            memory_id=mem_id,
-            type=action["type"],
-            priority=action["priority"],
-            reasoning=action["reasoning"],
-            payload=action,
-        )
-
-    except Exception as e:
-        db.set_account_error(account_id, str(e))
 
 
 @app.get("/accounts/{account_id}", response_class=HTMLResponse)
@@ -519,7 +499,6 @@ def _log_outreach_to_memory(account_id: int, action_type: str, contact_name: str
         engagement["total_touchpoints"] = engagement.get("total_touchpoints", 0) + 1
         memory["engagement_history"] = engagement
 
-        # Mark the used angle on the matching pain point
         if pain_point:
             for pp in memory.get("pain_points", []):
                 if pp.get("point") == pain_point:
@@ -557,7 +536,6 @@ def _generate_and_log_draft(account_id: int, action_id: int):
         rep_context = build_rep_context()
         is_fresh = action.get("source", "memory") == "fresh"
 
-        # Fresh actions already have a complete draft in the payload
         if is_fresh:
             draft = payload.get("draft", {})
         else:
@@ -602,6 +580,7 @@ def reject_account_action(account_id: int, action_id: int):
 
 
 MAX_RETHINKS = 3
+
 
 @app.post("/accounts/{account_id}/actions/{action_id}/rethink")
 def rethink_account_action(
@@ -716,11 +695,9 @@ def refresh_account(
     account_id: int,
     user_name: Optional[str] = Cookie(default=None),
 ):
-    """Manually trigger signal ingestion + memory update + website re-scrape."""
     account = db.get_account(account_id)
     if not account:
         return HTMLResponse("Account not found", status_code=404)
-
     background_tasks.add_task(_refresh_account_intelligence, account_id, rescrape_website=True)
     return RedirectResponse(f"/accounts/{account_id}", status_code=303)
 
@@ -731,23 +708,12 @@ def run_fresh_pipeline(
     account_id: int,
     user_name: Optional[str] = Cookie(default=None),
 ):
-    """Run the full 5-stage pipeline against current CRM data, independent of account memory."""
     account = db.get_account(account_id)
     if not account:
         return HTMLResponse("Account not found", status_code=404)
-
     db.set_account_fresh_running(account_id, True)
     background_tasks.add_task(_run_fresh_account, account_id)
     return RedirectResponse(f"/accounts/{account_id}", status_code=303)
-
-
-_CHANNEL_TO_TYPE = {
-    "email": "send_email",
-    "cold_call": "call",
-    "voicemail": "voicemail",
-    "linkedin": "monitor",
-    "research": "monitor",
-}
 
 
 def _run_fresh_account(account_id: int):
@@ -769,14 +735,14 @@ def _run_fresh_account(account_id: int):
         action_result = run_action(assessment, strategy_result, angle_result)
         draft = run_draft(assessment, strategy_result, angle_result, action_result, build_rep_context())
 
-        operator_type = assessment.get("operator_type")
+        activity_type = assessment.get("activity_type")
         current_software = (
             assessment.get("deal_context", {}).get("current_software")
             or lead.get("current_software")
         )
-        operator_ctx, software_ctx = load_lenses(vertical, operator_type, current_software)
+        activity_ctx, software_ctx = load_lenses(vertical, activity_type, current_software)
         try:
-            discovery = run_discovery(assessment, angle_result, operator_ctx, software_ctx)
+            discovery = run_discovery(assessment, angle_result, activity_ctx, software_ctx)
         except Exception:
             discovery = None
 
@@ -806,7 +772,6 @@ def _run_fresh_account(account_id: int):
             source="fresh",
         )
 
-        # Pre-generate the memory-based draft so both sides are ready for comparison
         pending = db.get_pending_action(account_id)
         if pending and not pending.get("draft"):
             mem_row = db.get_current_memory(account_id)
@@ -847,7 +812,6 @@ def _refresh_account_intelligence(account_id: int, rescrape_website: bool = Fals
     try:
         new_signals = ingestor.ingest(account_id)
 
-        # Re-scrape website on manual refresh and add a signal if booking software changed
         if rescrape_website:
             current_mem = db.get_current_memory(account_id)
             if current_mem:
@@ -888,120 +852,6 @@ def _refresh_account_intelligence(account_id: int, rescrape_website: bool = Fals
         )
     except Exception:
         pass
-
-
-# ─── Neglected — single lead run ──────────────────────────────────────────────
-
-@app.get("/neglected", response_class=HTMLResponse)
-def neglected_page(request: Request, user_name: Optional[str] = Cookie(default=None)):
-    if not user_name:
-        return RedirectResponse("/identity")
-    return templates.TemplateResponse(request, "neglected.html", {
-        "user": _get_user(user_name),
-        "result": None,
-        "error": None,
-        "lead_id": "",
-    })
-
-
-@app.post("/neglected", response_class=HTMLResponse)
-def run_neglected(
-    background_tasks: BackgroundTasks,
-    request: Request,
-    lead_id: str = Form(...),
-    user_name: Optional[str] = Cookie(default=None),
-):
-    if not user_name:
-        return RedirectResponse("/identity")
-
-    lead_id = lead_id.strip()
-    vertical = "tourism"
-    result = None
-    error = None
-
-    try:
-        vertical_context, vertical_signals = load_vertical(vertical)
-        lead = fetch_lead(lead_id)
-
-        assessment = run_assess(lead, vertical_context, vertical_signals)
-        strategy_result = run_strategy(assessment)
-        angle_result = run_angle(assessment, strategy_result)
-        action_result = run_action(assessment, strategy_result, angle_result)
-        draft = run_draft(assessment, strategy_result, angle_result, action_result, build_rep_context())
-
-        operator_type = assessment.get("operator_type")
-        current_software = (
-            assessment.get("deal_context", {}).get("current_software")
-            or lead.get("current_software")
-        )
-        operator_ctx, software_ctx = load_lenses(vertical, operator_type, current_software)
-        try:
-            discovery = run_discovery(assessment, angle_result, operator_ctx, software_ctx)
-        except Exception:
-            discovery = None
-
-        git_hash = _git_hash()
-
-        # Auto-register the account so this run is stored and visible in Accounts
-        existing = db.get_account_by_lead_id(lead_id)
-        if existing:
-            account_id = existing["id"]
-        else:
-            account_id = db.create_account(
-                crm_lead_id=lead_id,
-                company_name=lead.get("company_name", "..."),
-                vertical=vertical,
-            )
-            background_tasks.add_task(_init_account, account_id, lead_id, vertical)
-
-        # Store the run as an action so it appears in the account's history
-        action_type = _CHANNEL_TO_TYPE.get(
-            action_result.get("recommended_action", "email"), "send_email"
-        )
-        db.expire_fresh_actions(account_id)
-        db.create_action(
-            account_id=account_id,
-            memory_id=None,
-            type=action_type,
-            priority="normal",
-            reasoning=action_result.get("reasoning", angle_result.get("why_now", "")),
-            payload={
-                "assessment": assessment,
-                "strategy_result": strategy_result,
-                "angle_result": angle_result,
-                "action_result": action_result,
-                "draft": draft,
-                "discovery": discovery,
-                "contact_name": action_result.get("contact_name"),
-                "contact_email": action_result.get("contact_email"),
-                "contact_phone": action_result.get("contact_phone"),
-                "git_hash": git_hash,
-            },
-            source="neglected",
-        )
-
-        result = {
-            "company_name": lead.get("company_name"),
-            "lead_id": lead_id,
-            "account_id": account_id,
-            "assessment": assessment,
-            "strategy_result": strategy_result,
-            "angle_result": angle_result,
-            "action_result": action_result,
-            "draft": draft,
-            "discovery": discovery,
-            "recent_activity": lead.get("recent_activity", []),
-            "git_hash": git_hash,
-        }
-    except Exception as e:
-        error = str(e)
-
-    return templates.TemplateResponse(request, "neglected.html", {
-        "user": _get_user(user_name),
-        "result": result,
-        "error": error,
-        "lead_id": lead_id,
-    })
 
 
 # ─── Commission ───────────────────────────────────────────────────────────────

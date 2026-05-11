@@ -31,7 +31,7 @@ Always work through this hierarchy. Stop at the first level where a real signal 
 
 **2. CRM deal/account signals (strong)** — deal size, days since last activity, lead status, current software explicitly mentioned in the CRM, known OTA dependency stated in notes. Concrete and account-specific, but less personal than relationship signals.
 
-**3. Vertical/timing context (moderate)** — seasonal timing, industry-wide patterns, competitor dynamics relevant to this operator type. Useful for "why now" framing but not specific enough to stand alone as an angle.
+**3. Vertical/timing context (moderate)** — seasonal timing, industry-wide patterns, competitor dynamics relevant to this activity type. Useful for "why now" framing but not specific enough to stand alone as an angle.
 
 **4. Website observations (weak — last resort only)** — automated scrape data such as no booking widget detected, Book Now CTA with no booking software, OTA badges visible. Use a website observation as the primary angle ONLY when levels 1–3 yield nothing concrete. A website observation is a cold door-opener, not a commercial argument.
 

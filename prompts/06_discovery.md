@@ -1,6 +1,6 @@
 ## Stage 6 — Discovery Package
 
-A rep is about to reach out to a neglected pipeline account. You have the Stage 1 assessment, the selected angle, and contextual knowledge about their operator type and current software.
+A rep is about to reach out to a neglected pipeline account. You have the Stage 1 assessment, the selected angle, and contextual knowledge about their activity type and current software.
 
 Generate a discovery package that makes the rep sound like they actually know this type of business.
 
@@ -16,8 +16,8 @@ Generate a discovery package that makes the rep sound like they actually know th
 
 ---
 
-### Operator Type Context
-{{operator_type_context}}
+### Activity Type Context
+{{activity_type_context}}
 
 ---
 
@@ -32,7 +32,7 @@ Generate a discovery package that makes the rep sound like they actually know th
 Questions to ask in the conversation that will confirm or reveal pain points. Rules:
 - Don't ask about things you already know from the CRM (check the assessment)
 - Questions should open a conversation, not interrogate
-- Draw on operator type and software-specific knowledge where available — be specific, not generic
+- Draw on activity type and software-specific knowledge where available — be specific, not generic
 - At least one question should relate to operational process (how do they do X day-to-day)
 - If software context exists, include 1–2 questions that naturally surface a specific gap without explicitly referencing the competitor
 
@@ -44,7 +44,7 @@ Short context the rep should know before reaching out:
 - Flag any risk (e.g. objection on record, sensitivity to approach)
 
 ### 3. Competitor context (1–2 sentences, or null)
-If operator_type_context and software_context are both available, describe the specific overlap: what does this operator type specifically struggle with in their current software?
+If activity_type_context and software_context are both available, describe the specific overlap: what does this activity type specifically struggle with in their current software?
 
 Be precise — not "Rezdy has limits" but "Rezdy's manifest fields are fixed, so scuba operators can't capture cert level or equipment size at booking — that all happens on the day, manually."
 

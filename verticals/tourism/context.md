@@ -6,7 +6,7 @@
   The richer it is, the better Claude understands signals, objections, and timing.
 
   What to add with your manager:
-  - More operator types you commonly sell to (e.g. accommodation-linked activities,
+  - More activity types you commonly sell to (e.g. accommodation-linked activities,
     multi-day tour operators, attraction venues)
   - More objection patterns you hear in real calls — exact language if possible
   - More detail on FareHarbor's specific value props vs Rezdy, Checkfront, etc.
@@ -23,7 +23,7 @@ Tourism operators sell experiences: guided tours, wildlife encounters, adventure
 
 In New Zealand and Australia, operators typically run between 1–5 staff in low season and scale up for peak. Revenue is highly seasonal — most operators see 60–80% of their annual bookings in a 3–5 month window. This creates genuine financial pressure around cash flow and occupancy.
 
-**Common operator types:**
+**Common activity types:**
 - Adventure and activity operators (rafting, bungy, skydive, kayak, dive)
 - Wildlife and nature experiences (dolphin watching, whale watching, bird sanctuaries)
 - Cultural and heritage attractions (Māori experiences, historic sites, museums)
@@ -139,7 +139,7 @@ Operators with high TripAdvisor ratings and strong organic search visibility are
 - Milford Sound / Fiordland: more year-round due to international visitor mix, but still softer June–August
 
 <!-- ADD MORE HERE: add any other regional patterns you encounter.
-     Any operator types that don't follow the main seasonal pattern? -->
+     Any activity types that don't follow the main seasonal pattern? -->
 
 ---
 

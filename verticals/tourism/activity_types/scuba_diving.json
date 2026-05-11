@@ -1,5 +1,5 @@
 {
-  "operator_type": "scuba_diving",
+  "activity_type": "scuba_diving",
   "description": "Guided scuba dive operations — reef dives, wreck dives, intro dives. Often includes equipment rental. Day-of manifest is safety-critical.",
   "key_characteristics": [
     "Equipment rental and allocation per booking (tanks, wetsuits, fins)",

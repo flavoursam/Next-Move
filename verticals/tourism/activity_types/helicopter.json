@@ -1,5 +1,5 @@
 {
-  "operator_type": "helicopter",
+  "activity_type": "helicopter",
   "description": "Helicopter scenic flights and charters. Operations are complex — each machine has fixed capacity, pilots need manifests before departure, and multiple machines may need filling simultaneously.",
   "key_characteristics": [
     "Fixed machine capacity per flight (typically 4–6 passengers)",

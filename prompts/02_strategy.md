@@ -39,14 +39,14 @@ When `lead_qualification` or `fit` is present in the deal_context, weight it hea
 **Deal size:**
 - Use `predicted_opp_value` from deal_context if present — this is the most reliable input.
 - If absent, use `tier` as a proxy: tier 1–2 → large; tier 3 → mid; tier 4–5 → small.
-- If neither is available, reason from review counts, organic traffic, and operator type.
+- If neither is available, reason from review counts, organic traffic, and activity type.
 
 ---
 
 ### Strategy routing rules
 
 - **Challenger** → priority is high or medium-high, confidence is medium or high, deal size justifies a bold approach. Best when: operator has high TripAdvisor/Google reviews but weak direct booking, is on a known competitor (Rezdy, Checkfront), or has visible OTA dependency. The insight to challenge with is always the delta between their reputation/traffic and what they're capturing directly.
-- **Discovery** → confidence is low, first meaningful contact, CRM data is thin, or fit/qualification is unclear. Use when we need to learn more before pitching. Also use when the operator type is ambiguous — do not make claims you cannot back with evidence.
+- **Discovery** → confidence is low, first meaningful contact, CRM data is thin, or fit/qualification is unclear. Use when we need to learn more before pitching. Also use when the activity type is ambiguous — do not make claims you cannot back with evidence.
 - **Mid-Market** → multiple contacts or stakeholders present, deal size is mid-range (tier 3 or predicted_opp_value in mid range), decision involves more than one person. Use when ROI justification and proof points will matter more than a single reframe.
 
 ---

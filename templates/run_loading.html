@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Running... — NextMove{% endblock %}
+
+{% block extra_head %}
+<style>
+  .log-stream {
+    font-family: monospace;
+    font-size: 13px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px 18px;
+    min-height: 140px;
+    line-height: 1.8;
+  }
+  .log-line { color: var(--muted); }
+  .log-line.log-done { color: var(--text); font-weight: 600; }
+  .log-line.log-error { color: #dc2626; }
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+  .cursor {
+    display: inline-block;
+    width: 7px;
+    height: 13px;
+    background: var(--muted);
+    vertical-align: middle;
+    margin-left: 2px;
+    animation: blink 1s step-end infinite;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 560px;">
+  <div style="margin-bottom: 20px;">
+    <h1 class="page-title" style="margin-bottom: 4px;">Running Next Touchpoint</h1>
+    <p class="meta">Hang tight — fetching CRM data and running all 5 pipeline stages.</p>
+  </div>
+
+  <div class="card">
+    <div class="log-stream" id="log-stream">
+      <div id="log-lines"></div>
+      <span class="cursor" id="cursor"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+  const evtSource = new EventSource('/run/{{ run_id }}/stream');
+  const logLines = document.getElementById('log-lines');
+  const cursor = document.getElementById('cursor');
+
+  evtSource.onmessage = function(e) {
+    const data = JSON.parse(e.data);
+    if (data.msg) {
+      const line = document.createElement('div');
+      line.className = 'log-line' + (data.msg.startsWith('Done') ? ' log-done' : '') + (data.msg.startsWith('Error') ? ' log-error' : '');
+      line.textContent = '> ' + data.msg;
+      logLines.appendChild(line);
+    }
+  };
+
+  evtSource.addEventListener('done', function(e) {
+    evtSource.close();
+    cursor.remove();
+    window.location.href = e.data;
+  });
+
+  evtSource.onerror = function() {
+    evtSource.close();
+    cursor.remove();
+    const line = document.createElement('div');
+    line.className = 'log-line log-error';
+    line.textContent = '> Connection lost. Reloading...';
+    logLines.appendChild(line);
+    setTimeout(() => window.location.reload(), 2000);
+  };
+</script>
+{% endblock %}

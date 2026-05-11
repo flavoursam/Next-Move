@@ -18,7 +18,7 @@
 </div>
 
 <div class="card" style="max-width: 520px; margin-bottom: 32px;">
-  <form method="post" action="/neglected">
+  <form method="post" action="/">
     <div class="form-group">
       <label class="form-label">Close Lead ID</label>
       <input
@@ -34,7 +34,7 @@
       <p class="form-hint">From the Close URL: app.close.com/lead/<strong>lead_abc123</strong>/</p>
       <label style="display: flex; align-items: flex-start; gap: 10px; margin-top: 14px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); cursor: pointer; line-height: 1.5;">
         <input type="checkbox" style="margin-top: 3px; flex-shrink: 0; width: 15px; height: 15px; accent-color: var(--accent, #2563eb); cursor: pointer;">
-        <span style="font-size: 13px; color: var(--text); font-weight: 500;">By using this tool, I surrender 10% of this lead's commission to the sales owner.</span>
+        <span style="font-size: 13px; color: var(--text); font-weight: 500;">By using this tool, I surrender 10% of this lead's commission to the app owner.</span>
       </label>
     </div>
     <button type="submit" class="btn btn-primary">Run →</button>
@@ -59,13 +59,13 @@
   <div style="display: flex; align-items: center; gap: 10px;">
     <span style="font-size: 10px; font-family: monospace; color: var(--muted); opacity: 0.6;" title="NextMove version">{{ result.git_hash }}</span>
     {% if result.account_id %}
-    <a href="/accounts/{{ result.account_id }}" class="btn btn-secondary" style="font-size: 12px; padding: 4px 10px;">View Account →</a>
+    <a href="/accounts/{{ result.account_id }}" class="btn btn-primary" style="font-size: 12px; padding: 4px 10px;">View Account →</a>
     {% endif %}
   </div>
 </div>
 <p class="meta" style="margin-bottom: 24px;">
   {% if result.assessment.deal_context.current_software %}Software: <strong>{{ result.assessment.deal_context.current_software }}</strong> · {% endif %}
-  {% if result.assessment.operator_type %}Type: <strong>{{ result.assessment.operator_type | replace("_", " ") | title }}</strong> · {% endif %}
+  {% if result.assessment.activity_type %}Type: <strong>{{ result.assessment.activity_type | replace("_", " ") | title }}</strong> · {% endif %}
   Strategy: <strong>{{ result.strategy_result.selected_strategy | replace("_", " ") | title }}</strong>
 </p>
 

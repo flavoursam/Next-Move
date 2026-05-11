@@ -1,10 +1,4 @@
-"""
-Background scheduler.
-
-Two loops:
-  check_sequences  — legacy gate check for the old sequence/touchpoint system
-  process_accounts — new account intelligence loop: ingest signals, update memory, generate actions
-"""
+"""Background scheduler — hourly account intelligence loop."""
 
 import os
 from datetime import datetime, timezone
@@ -12,60 +6,11 @@ from datetime import datetime, timezone
 from apscheduler.schedulers.background import BackgroundScheduler
 
 import db
-from pipeline import gate
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
-
-# ─── Legacy sequence gate ──────────────────────────────────────────────────────
-
-def check_sequences():
-    """Gate check for the old sequence/touchpoint system."""
-    sequences = db.get_active_sequences()
-
-    for seq in sequences:
-        since = seq["last_checked_at"] or seq["created_at"]
-        lead_id = seq["lead_id"]
-        seq_id = seq["id"]
-
-        try:
-            result = gate.classify(lead_id, since)
-        except Exception:
-            db.update_last_checked(seq_id, _now())
-            continue
-
-        verdict = result["verdict"]
-
-        if verdict != "continue":
-            last_tp_num = db.get_last_approved_touchpoint_number(seq_id) or 0
-            db.save_gate_verdict(
-                sequence_id=seq_id,
-                after_touchpoint_number=last_tp_num,
-                verdict=verdict,
-                reason=result["reason"],
-                key_signals=result.get("key_signals", []),
-            )
-
-            if verdict == "pause":
-                db.pause_sequence(seq_id)
-
-        if result.get("demo_landed") and not db.has_commission_event(seq_id):
-            opp_value = seq.get("opportunity_value_usd") or 0
-            db.save_commission_event(
-                sequence_id=seq_id,
-                lead_id=lead_id,
-                company_name=seq["company_name"],
-                user_id=seq["user_id"],
-                opportunity_value_usd=opp_value,
-                commission_amount=round(opp_value * 0.1, 2),
-            )
-
-        db.update_last_checked(seq_id, _now())
-
-
-# ─── Account intelligence loop ────────────────────────────────────────────────
 
 def process_accounts():
     """
@@ -106,7 +51,7 @@ def process_accounts():
                     current_mem_row["memory"], new_signals, vertical_context
                 )
             else:
-                continue  # account has no memory yet — needs manual init via web UI
+                continue  # account has no memory yet — needs a run through Next Touchpoint first
 
             first_signal_id = new_signals[0].get("id")
             mem_id = db.save_memory(account_id, updated_memory, first_signal_id)
@@ -147,7 +92,6 @@ def _load_vertical_context(vertical: str) -> str:
 
 def start() -> BackgroundScheduler:
     scheduler = BackgroundScheduler()
-    scheduler.add_job(check_sequences, "interval", hours=12, id="gate_check")
     scheduler.add_job(process_accounts, "interval", hours=1, id="account_intelligence")
     scheduler.start()
     return scheduler

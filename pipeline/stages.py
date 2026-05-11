@@ -190,12 +190,12 @@ def run_draft(
 def run_discovery(
     assessment: dict,
     angle_result: dict,
-    operator_type_context: dict | None,
+    activity_type_context: dict | None,
     software_context: dict | None,
 ) -> dict:
     """
     Stage 6 — Discovery Package (used for neglected account runs).
-    Input:  Stage 1 assessment + Stage 3 angle + operator type context + software context
+    Input:  Stage 1 assessment + Stage 3 angle + activity type context + software context
     Output: discovery_questions, rep_tips, competitor_context
     Prompt: prompts/06_discovery.md
     """
@@ -203,7 +203,7 @@ def run_discovery(
         _load_prompt("06_discovery.md"),
         assessment=assessment,
         angle_result=angle_result,
-        operator_type_context=operator_type_context or {},
+        activity_type_context=activity_type_context or {},
         software_context=software_context or {},
     )
     return _call_claude(prompt)

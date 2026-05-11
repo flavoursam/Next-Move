@@ -835,6 +835,38 @@ def expire_fresh_actions(account_id: int):
         )
 
 
+def get_runs_list() -> list[dict]:
+    """All accounts run through Next Touchpoint, most recent first."""
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT
+                a.id AS account_id,
+                a.company_name,
+                a.crm_lead_id,
+                a.vertical,
+                act.id AS action_id,
+                act.payload,
+                act.created_at AS last_run_at,
+                act.type AS action_type
+            FROM accounts a
+            JOIN actions act ON act.id = (
+                SELECT id FROM actions
+                WHERE account_id = a.id AND source = 'neglected'
+                ORDER BY id DESC LIMIT 1
+            )
+            ORDER BY act.created_at DESC
+        """).fetchall()
+    result = []
+    for r in rows:
+        row = dict(r)
+        try:
+            row["payload"] = json.loads(row["payload"])
+        except Exception:
+            row["payload"] = {}
+        result.append(row)
+    return result
+
+
 def get_latest_neglected_run(account_id: int) -> dict | None:
     """Return the most recent neglected-tool run for an account."""
     with get_conn() as conn:

@@ -1,5 +1,5 @@
 {
-  "operator_type": "boat_tour",
+  "activity_type": "boat_tour",
   "description": "Boat-based tours — harbour cruises, whale watching, sailing charters, dolphin tours. Fixed vessel capacity, weather-dependent, and often reliant on international pre-arrival bookings.",
   "key_characteristics": [
     "Fixed vessel capacity per departure",

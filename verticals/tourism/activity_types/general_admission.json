@@ -1,5 +1,5 @@
 {
-  "operator_type": "general_admission",
+  "activity_type": "general_admission",
   "description": "High-volume, fixed-venue attractions — museums, nature parks, cultural sites, zoos. No capacity constraint means the priority is streamlined check-in and wide distribution, not slot management.",
   "key_characteristics": [
     "High booking volume, low per-booking complexity",

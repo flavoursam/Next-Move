@@ -1,31 +1,28 @@
 # NextMove
 
-AI-powered account intelligence tool for B2B sales reps. Connects to Close CRM, builds persistent memory per account, and surfaces a recommended next action with a ready-to-use outreach asset (email, call script, or voicemail). Reps can also run a stateless fresh pipeline for a second opinion.
+AI-powered account intelligence tool for B2B sales reps. Connects to Close CRM, builds persistent memory per account, and surfaces a recommended next action with a ready-to-use outreach asset (email, call script, or voicemail).
 
 ## How to run
 
 ```bash
-# Install dependencies (first time only)
 pip install -r requirements.txt
+cp .env.example .env        # fill in your keys
+uvicorn app:app --reload    # web app at localhost:8000
 
-# Copy env template and fill in your keys
-cp .env.example .env
-
-# Start the web app
-uvicorn app:app --reload
-
-# CLI mode (single lead, no web app)
-python run.py
-python run.py lead_abc123XYZetc
+python run.py               # CLI mode (single lead)
+python run.py lead_abc123
 ```
 
-## Two systems
+## Pages
 
-**Account intelligence (primary)** — `GET /accounts`
-Stateful. Each account has a persistent memory document that accumulates over time. Signals are ingested hourly from Close, memory is updated by Claude Opus, and a next-best-action is generated. Reps approve or reject on the account detail page.
-
-**Legacy sequences** — `GET /`
-Stateless. Each touchpoint re-runs the full 5-stage pipeline fresh against Close. Still intact and working.
+| URL | What it is |
+|---|---|
+| `/` | Next Touchpoint — enter a Close lead ID, run the 5-stage pipeline, get immediate outreach + discovery |
+| `/runs` | All leads run through Next Touchpoint — company, last run time, software, angle, action |
+| `/accounts/{id}` | Account detail — persistent memory + memory-based recommendation + fresh-pipeline card |
+| `/commission` | Commission tracking — 10% of opp value owed to app owner on each demo booked |
+| `/admin` | Aggregate stats |
+| `/identity` | User identity setup (cookie-based, no passwords) |
 
 ## The pipeline (5 stages)
 
@@ -40,6 +37,7 @@ CRM fetch → Stage 1 (Assess) → Stage 2 (Strategy) → Stage 3 (Angle) → St
 | 3 | `prompts/03_angle.md` | Identify the single pain point and insight to lead with |
 | 4 | `prompts/04_action.md` | Select the right channel and contact |
 | 5 | `prompts/05_draft.md` | Write the actual outreach asset (email ≤150 words, call script, voicemail) |
+| 6 | `prompts/06_discovery.md` | Discovery questions, rep tips, competitor context |
 
 ## Key files
 
@@ -47,12 +45,12 @@ CRM fetch → Stage 1 (Assess) → Stage 2 (Strategy) → Stage 3 (Angle) → St
 |---|---|
 | `app.py` | FastAPI web server — all routes |
 | `db.py` | SQLite database — all reads and writes |
-| `scheduler.py` | APScheduler — hourly account intelligence loop + 12hr gate checks |
+| `scheduler.py` | APScheduler — hourly account intelligence loop |
 | `run.py` | CLI entrypoint — runs pipeline without the web app |
 | `pipeline/crm.py` | Close API logic — fetch and normalise a lead, fetch activities since a date |
 | `pipeline/website.py` | Scrape company website for booking software signals |
 | `pipeline/stages.py` | The 5 stage functions — mechanical runner, intelligence lives in prompts/ |
-| `pipeline/gate.py` | Gate classifier — continue / warn / pause for active sequences |
+| `pipeline/context_loader.py` | Load operator-type and software-specific context lenses |
 | `memory/updater.py` | Claude Opus agent — init and update account memory documents |
 | `actions/engine.py` | Claude Opus agent — determine next-best-action from memory |
 | `actions/drafter.py` | Claude Sonnet agent — generate outreach draft from memory + action |
@@ -76,6 +74,7 @@ Edit prompt files in `prompts/`. Never need to touch `pipeline/stages.py`.
 | What talking point is chosen | `prompts/03_angle.md` |
 | Which channel or contact is picked | `prompts/04_action.md` |
 | Tone or format of outreach drafts | `prompts/05_draft.md` |
+| Discovery questions and rep tips | `prompts/06_discovery.md` |
 | How memory is built initially | `prompts/memory_init.md` |
 | How memory updates (incl. confidence decay thresholds) | `prompts/memory_update.md` |
 | How next-best-action is reasoned | `prompts/action_engine.md` |
@@ -94,6 +93,10 @@ To change these thresholds: edit the numbers `28` and `56` in `prompts/memory_up
 ## Fresh pipeline (stateless comparison)
 
 On any account detail page, click **"↺ Run"** to run all 5 pipeline stages against live Close data, ignoring account memory. The result appears as a purple card alongside the memory-based recommendation so reps can compare both before approving. Fresh results never update the memory document.
+
+## How Next Touchpoint and Account Intelligence connect
+
+Running a lead through Next Touchpoint (`/`) automatically creates an account record. The account then gets a memory document built in the background (Stage 1 + Claude Opus), and is picked up by the hourly scheduler for ongoing signal ingestion. So every Next Touchpoint run double-registers the lead for long-term tracking at `/accounts/{id}`.
 
 ## Adding a new vertical
 
