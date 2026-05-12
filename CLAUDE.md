@@ -5,13 +5,29 @@ AI-powered account intelligence tool for B2B sales reps. Connects to Close CRM, 
 ## How to run
 
 ```bash
-pip install -r requirements.txt
-cp .env.example .env        # fill in your keys
-uvicorn app:app --reload    # web app at localhost:8000
+pip3 install -r requirements.txt
 
-python run.py               # CLI mode (single lead)
-python run.py lead_abc123
+# Create .env with your keys (no .env.example — create from scratch):
+# ANTHROPIC_API_KEY=...
+# CLOSE_API_KEY=...
+# CLOSE_WRITEBACK_ENABLED=false
+# REP_NAME=Sam
+
+python3 -m uvicorn app:app --reload   # web app at localhost:8000
+
+python3 run.py               # CLI mode (single lead)
+python3 run.py lead_abc123
 ```
+
+### Quick-start (after first setup)
+
+Add to `~/.zshrc` for a single command launch from any terminal:
+
+```bash
+alias nextmove='cd ~/Documents/Claude/Projects/Next-Move && python3 -m uvicorn app:app --reload'
+```
+
+Then just type `nextmove` to start.
 
 ## Pages
 

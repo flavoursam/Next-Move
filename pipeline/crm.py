@@ -1,3 +1,4 @@
+from typing import Optional
 """
 Close.io CRM connector.
 
@@ -118,7 +119,7 @@ def _fetch_recent_calls(lead_id: str) -> list[dict]:
         return []
 
 
-def _parse_tier(raw) -> int | None:
+def _parse_tier(raw) -> Optional[int]:
     if raw is None:
         return None
     s = str(raw).strip()
@@ -341,7 +342,7 @@ def _map_custom_fields(raw: dict) -> dict:
     return result
 
 
-def _extract_location(raw: dict, custom: dict) -> str | None:
+def _extract_location(raw: dict, custom: dict) -> Optional[str]:
     """Best-effort location from addresses or custom fields."""
     addresses = raw.get("addresses", [])
     if addresses:
@@ -362,7 +363,7 @@ def _extract_location(raw: dict, custom: dict) -> str | None:
     return ", ".join(parts) if parts else None
 
 
-def _days_since(date_str: str | None) -> int | None:
+def _days_since(date_str: Optional[str]) -> Optional[int]:
     """Calculate how many days ago a date string (YYYY-MM-DD) was."""
     if not date_str:
         return None

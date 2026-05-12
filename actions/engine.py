@@ -1,3 +1,4 @@
+from typing import Optional
 """
 Action engine — given an account memory, determine the next best action.
 Returns a structured action dict ready to be stored and shown to the rep.
@@ -14,7 +15,7 @@ _client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 MODEL = os.getenv("NEXTMOVE_PLANNING_MODEL", "claude-opus-4-7")
 
 
-def _parse_tier(raw) -> int | None:
+def _parse_tier(raw) -> Optional[int]:
     if raw is None:
         return None
     s = str(raw).strip()
@@ -38,7 +39,7 @@ def _fill(template: str, **kwargs) -> str:
     return template
 
 
-def determine(account_memory: dict, vertical_context: str, excluded_angles: list[str] | None = None) -> dict:
+def determine(account_memory: dict, vertical_context: str, excluded_angles: Optional[list] = None) -> dict:
     """
     Given the current account memory, return a next-best-action recommendation.
 

@@ -70,7 +70,7 @@ _CHANNEL_TO_TYPE = {
 }
 
 
-def _get_user(user_name: str | None) -> dict | None:
+def _get_user(user_name: Optional[str]) -> Optional[dict]:
     if not user_name:
         return None
     return db.get_or_create_user(user_name)
@@ -484,7 +484,7 @@ def approve_account_action(
     return RedirectResponse(redirect_url, status_code=303)
 
 
-def _log_outreach_to_memory(account_id: int, action_type: str, contact_name: str | None, pain_point: str | None = None):
+def _log_outreach_to_memory(account_id: int, action_type: str, contact_name: Optional[str], pain_point: Optional[str] = None):
     """Directly update memory to record that outreach was sent, without a Claude call."""
     try:
         mem_row = db.get_current_memory(account_id)

@@ -1,3 +1,4 @@
+from typing import Optional
 """
 Load contextual lenses for the discovery package.
 
@@ -13,7 +14,7 @@ import json
 import os
 
 
-def load_activity_type(vertical: str, activity_type: str | None) -> dict | None:
+def load_activity_type(vertical: str, activity_type: Optional[str]) -> Optional[dict]:
     if not activity_type:
         return None
     key = activity_type.lower().replace(" ", "_").replace("-", "_")
@@ -24,7 +25,7 @@ def load_activity_type(vertical: str, activity_type: str | None) -> dict | None:
         return json.load(f)
 
 
-def load_software(vertical: str, current_software: str | None) -> dict | None:
+def load_software(vertical: str, current_software: Optional[str]) -> Optional[dict]:
     if not current_software:
         return None
     # Use first listed software if multiple (e.g. "Rezdy, Checkfront")
@@ -38,9 +39,9 @@ def load_software(vertical: str, current_software: str | None) -> dict | None:
 
 def load_lenses(
     vertical: str,
-    activity_type: str | None,
-    current_software: str | None,
-) -> tuple[dict | None, dict | None]:
+    activity_type: Optional[str],
+    current_software: Optional[str],
+) -> tuple:
     """Returns (activity_type_context, software_context). Either may be None."""
     return (
         load_activity_type(vertical, activity_type),

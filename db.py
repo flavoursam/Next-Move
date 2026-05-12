@@ -3,6 +3,7 @@
 import json
 import sqlite3
 from datetime import datetime, timezone
+from typing import Optional, Union
 
 DB_PATH = "nextmove.db"
 
@@ -171,7 +172,7 @@ def create_sequence(lead_id: str, company_name: str, user_id: int, vertical: str
         return cur.lastrowid
 
 
-def get_sequence(seq_id: int) -> dict | None:
+def get_sequence(seq_id: int) -> Optional[dict]:
     with get_conn() as conn:
         row = conn.execute(
             """SELECT s.*, u.name as user_name
@@ -211,7 +212,7 @@ def update_sequence_status(seq_id: int, status: str):
         )
 
 
-def update_sequence_lead_info(seq_id: int, company_name: str, opp_value: int | None):
+def update_sequence_lead_info(seq_id: int, company_name: str, opp_value: Optional[int]):
     with get_conn() as conn:
         conn.execute(
             "UPDATE sequences SET company_name = ?, opportunity_value_usd = ?, updated_at = ? WHERE id = ?",
@@ -280,13 +281,13 @@ def get_touchpoints(sequence_id: int) -> list[dict]:
         return [dict(r) for r in rows]
 
 
-def get_touchpoint(tp_id: int) -> dict | None:
+def get_touchpoint(tp_id: int) -> Optional[dict]:
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM touchpoints WHERE id = ?", (tp_id,)).fetchone()
         return dict(row) if row else None
 
 
-def get_last_touchpoint(sequence_id: int) -> dict | None:
+def get_last_touchpoint(sequence_id: int) -> Optional[dict]:
     with get_conn() as conn:
         row = conn.execute(
             "SELECT * FROM touchpoints WHERE sequence_id = ? ORDER BY number DESC LIMIT 1",
@@ -295,7 +296,7 @@ def get_last_touchpoint(sequence_id: int) -> dict | None:
         return dict(row) if row else None
 
 
-def get_last_approved_touchpoint_number(sequence_id: int) -> int | None:
+def get_last_approved_touchpoint_number(sequence_id: int) -> Optional[int]:
     with get_conn() as conn:
         row = conn.execute(
             """SELECT number FROM touchpoints
@@ -306,7 +307,7 @@ def get_last_approved_touchpoint_number(sequence_id: int) -> int | None:
         return row["number"] if row else None
 
 
-def approve_touchpoint(tp_id: int, close_activity_id: str | None, edited_content: str | None):
+def approve_touchpoint(tp_id: int, close_activity_id: Optional[str], edited_content: Optional[str]):
     with get_conn() as conn:
         conn.execute(
             """UPDATE touchpoints
@@ -360,7 +361,7 @@ def get_gate_verdicts(sequence_id: int) -> list[dict]:
         return result
 
 
-def get_latest_gate_verdict(sequence_id: int) -> dict | None:
+def get_latest_gate_verdict(sequence_id: int) -> Optional[dict]:
     with get_conn() as conn:
         row = conn.execute(
             "SELECT * FROM gate_verdicts WHERE sequence_id = ? ORDER BY created_at DESC LIMIT 1",
@@ -393,7 +394,7 @@ def save_commission_event(
     lead_id: str,
     company_name: str,
     user_id: int,
-    opportunity_value_usd: int | None,
+    opportunity_value_usd: Optional[int],
     commission_amount: float,
 ):
     with get_conn() as conn:
@@ -474,13 +475,13 @@ def create_account(crm_lead_id: str, company_name: str, vertical: str) -> int:
         return cur.lastrowid
 
 
-def get_account(account_id: int) -> dict | None:
+def get_account(account_id: int) -> Optional[dict]:
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
         return dict(row) if row else None
 
 
-def get_account_by_lead_id(crm_lead_id: str) -> dict | None:
+def get_account_by_lead_id(crm_lead_id: str) -> Optional[dict]:
     with get_conn() as conn:
         row = conn.execute(
             "SELECT * FROM accounts WHERE crm_lead_id = ?", (crm_lead_id,)
@@ -663,7 +664,7 @@ def clear_memory(account_id: int):
 
 
 def save_memory(
-    account_id: int, memory: dict, triggered_by_signal_id: int | None = None
+    account_id: int, memory: dict, triggered_by_signal_id: Optional[int] = None
 ) -> int:
     with get_conn() as conn:
         cur = conn.execute(
@@ -676,7 +677,7 @@ def save_memory(
     return mem_id
 
 
-def get_current_memory(account_id: int) -> dict | None:
+def get_current_memory(account_id: int) -> Optional[dict]:
     with get_conn() as conn:
         row = conn.execute(
             """SELECT * FROM account_memory WHERE account_id = ?
@@ -708,13 +709,13 @@ def get_memory_history(account_id: int) -> list[dict]:
 
 def create_action(
     account_id: int,
-    memory_id: int | None,
+    memory_id: Optional[int],
     type: str,
     priority: str,
     reasoning: str,
     payload: dict,
     source: str = "memory",
-    draft: dict | None = None,
+    draft: Optional[dict] = None,
 ) -> int:
     with get_conn() as conn:
         cur = conn.execute(
@@ -727,7 +728,7 @@ def create_action(
         return cur.lastrowid
 
 
-def get_pending_action(account_id: int) -> dict | None:
+def get_pending_action(account_id: int) -> Optional[dict]:
     with get_conn() as conn:
         row = conn.execute(
             """SELECT * FROM actions WHERE account_id = ? AND source = 'memory' AND status = 'pending'
@@ -763,7 +764,7 @@ def get_action_history(account_id: int) -> list[dict]:
     return result
 
 
-def get_action(action_id: int) -> dict | None:
+def get_action(action_id: int) -> Optional[dict]:
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM actions WHERE id = ?", (action_id,)).fetchone()
     if not row:
@@ -778,7 +779,7 @@ def get_action(action_id: int) -> dict | None:
     return a
 
 
-def approve_action(action_id: int, draft: dict | None = None):
+def approve_action(action_id: int, draft: Optional[dict] = None):
     with get_conn() as conn:
         conn.execute(
             """UPDATE actions SET status = 'approved', draft = ?, actioned_at = ?
@@ -805,7 +806,7 @@ def expire_pending_actions(account_id: int):
         )
 
 
-def get_fresh_action(account_id: int) -> dict | None:
+def get_fresh_action(account_id: int) -> Optional[dict]:
     """Return the latest pending fresh-pipeline action for an account, if any."""
     with get_conn() as conn:
         row = conn.execute(
@@ -867,7 +868,7 @@ def get_runs_list() -> list[dict]:
     return result
 
 
-def get_latest_neglected_run(account_id: int) -> dict | None:
+def get_latest_neglected_run(account_id: int) -> Optional[dict]:
     """Return the most recent neglected-tool run for an account."""
     with get_conn() as conn:
         row = conn.execute(

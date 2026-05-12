@@ -1,3 +1,4 @@
+from typing import Optional
 """
 The 5 NextMove pipeline stages.
 
@@ -190,8 +191,8 @@ def run_draft(
 def run_discovery(
     assessment: dict,
     angle_result: dict,
-    activity_type_context: dict | None,
-    software_context: dict | None,
+    activity_type_context: Optional[dict],
+    software_context: Optional[dict],
 ) -> dict:
     """
     Stage 6 — Discovery Package (used for neglected account runs).

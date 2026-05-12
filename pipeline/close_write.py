@@ -1,3 +1,4 @@
+from typing import Optional
 """Write email drafts and CRM notes to Close.io."""
 
 import os
@@ -10,10 +11,10 @@ CLOSE_BASE_URL = "https://api.close.com/api/v1"
 
 def create_email_draft(
     lead_id: str,
-    contact_email: str | None,
+    contact_email: Optional[str],
     subject: str,
     body: str,
-) -> str | None:
+) -> Optional[str]:
     """Create an email draft on a Close lead. Returns the Close activity ID."""
     payload: dict = {
         "lead_id": lead_id,
@@ -35,7 +36,7 @@ def create_email_draft(
     return None
 
 
-def create_note(lead_id: str, note_text: str) -> str | None:
+def create_note(lead_id: str, note_text: str) -> Optional[str]:
     """Create a CRM note on a Close lead. Returns the Close activity ID."""
     resp = requests.post(
         f"{CLOSE_BASE_URL}/activity/note/",
