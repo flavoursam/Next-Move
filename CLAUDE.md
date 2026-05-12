@@ -17,17 +17,17 @@ python run.py lead_abc123
 
 | URL | What it is |
 |---|---|
-| `/` | Next Touchpoint — enter a Close lead ID, run the 5-stage pipeline, get immediate outreach + discovery |
+| `/` | Next Touchpoint — enter a Close lead ID, run the 6-stage pipeline, get immediate outreach + discovery |
 | `/runs` | All leads run through Next Touchpoint — company, last run time, software, angle, action |
 | `/accounts/{id}` | Account detail — persistent memory + memory-based recommendation + fresh-pipeline card |
 | `/commission` | Commission tracking — 10% of opp value owed to app owner on each demo booked |
 | `/admin` | Aggregate stats |
 | `/identity` | User identity setup (cookie-based, no passwords) |
 
-## The pipeline (5 stages)
+## The pipeline (6 stages)
 
 ```
-CRM fetch → Stage 1 (Assess) → Stage 2 (Strategy) → Stage 3 (Angle) → Stage 4 (Action) → Stage 5 (Draft)
+CRM fetch → Stage 1 (Assess) → Stage 2 (Strategy) → Stage 3 (Angle) → Stage 4 (Action) → Stage 5 (Draft) → Stage 6 (Discovery)
 ```
 
 | Stage | Prompt file | Job |
@@ -49,7 +49,9 @@ CRM fetch → Stage 1 (Assess) → Stage 2 (Strategy) → Stage 3 (Angle) → St
 | `run.py` | CLI entrypoint — runs pipeline without the web app |
 | `pipeline/crm.py` | Close API logic — fetch and normalise a lead, fetch activities since a date |
 | `pipeline/website.py` | Scrape company website for booking software signals |
-| `pipeline/stages.py` | The 5 stage functions — mechanical runner, intelligence lives in prompts/ |
+| `pipeline/stages.py` | The 6 stage functions — mechanical runner, intelligence lives in prompts/ |
+| `pipeline/close_write.py` | Write email drafts and CRM notes to Close (gated by `CLOSE_WRITEBACK_ENABLED`) |
+| `pipeline/writer.py` | Write CLI pipeline output to `output/*.json` |
 | `pipeline/context_loader.py` | Load operator-type and software-specific context lenses |
 | `memory/updater.py` | Claude Opus agent — init and update account memory documents |
 | `actions/engine.py` | Claude Opus agent — determine next-best-action from memory |
@@ -62,6 +64,14 @@ CRM fetch → Stage 1 (Assess) → Stage 2 (Strategy) → Stage 3 (Angle) → St
 | `strategies/` | Challenger, Discovery, Mid-Market playbooks injected into stages 2, 3, 5 |
 | `verticals/` | Industry context + structured signals injected into stage 1 |
 | `MEMORY_GUIDE.md` | Plain English reference for the memory system — read this if memory seems stale |
+
+## Model selection
+
+Stages 2 and 3 (strategy + angle) and memory/action engine use `claude-opus-4-7` by default — they require deeper reasoning. All other stages use `claude-sonnet-4-6`.
+
+Override via env vars:
+- `NEXTMOVE_PLANNING_MODEL` — stages 2/3, memory updater, action engine (default: `claude-opus-4-7`)
+- `NEXTMOVE_MODEL` — all other stages (default: `claude-sonnet-4-6`)
 
 ## Tuning output quality
 
@@ -81,6 +91,7 @@ Edit prompt files in `prompts/`. Never need to touch `pipeline/stages.py`.
 | Challenger / Discovery / Mid-Market approach | `strategies/*.md` |
 | Industry knowledge, pain points, buyer psychology | `verticals/tourism/context.md` |
 | Booking software the scraper detects | `pipeline/website.py` lines 15–41 |
+| Enable/disable pushing drafts to Close on approval | `CLOSE_WRITEBACK_ENABLED` in `.env` (default: `false`) |
 
 ## Confidence decay
 
@@ -92,7 +103,7 @@ To change these thresholds: edit the numbers `28` and `56` in `prompts/memory_up
 
 ## Fresh pipeline (stateless comparison)
 
-On any account detail page, click **"↺ Run"** to run all 5 pipeline stages against live Close data, ignoring account memory. The result appears as a purple card alongside the memory-based recommendation so reps can compare both before approving. Fresh results never update the memory document.
+On any account detail page, click **"↺ Run"** to run all 6 pipeline stages against live Close data, ignoring account memory. The result appears as a purple card alongside the memory-based recommendation so reps can compare both before approving. Fresh results never update the memory document.
 
 ## How Next Touchpoint and Account Intelligence connect
 

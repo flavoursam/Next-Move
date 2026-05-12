@@ -16,10 +16,65 @@
     {% if user %}
     <div class="nav-user">{{ user.name }}</div>
     {% endif %}
+    <div class="color-picker-wrap">
+      <button class="color-picker-btn" id="colorPickerBtn" title="Change background color" aria-label="Change background color">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
+      </button>
+      <div class="color-picker-panel" id="colorPickerPanel">
+        <input type="color" id="bgColorInput" title="Pick background color">
+        <div class="color-presets">
+          <button class="color-preset" data-color="#f8f9fa" style="background:#f8f9fa" title="Default"></button>
+          <button class="color-preset" data-color="#eef2ff" style="background:#eef2ff" title="Indigo"></button>
+          <button class="color-preset" data-color="#f0fdf4" style="background:#f0fdf4" title="Green"></button>
+          <button class="color-preset" data-color="#fff7ed" style="background:#fff7ed" title="Orange"></button>
+          <button class="color-preset" data-color="#fdf2f8" style="background:#fdf2f8" title="Pink"></button>
+          <button class="color-preset" data-color="#1a202c" style="background:#1a202c" title="Dark"></button>
+        </div>
+        <button class="color-reset" id="colorReset">Reset</button>
+      </div>
+    </div>
   </nav>
   <main class="main">
     {% block content %}{% endblock %}
   </main>
+  <style>
+    .color-picker-wrap { position: relative; }
+    .color-picker-btn {
+      background: none; border: 1px solid var(--border); border-radius: 6px;
+      padding: 5px 7px; cursor: pointer; color: var(--muted); display: flex; align-items: center;
+      transition: color .15s, border-color .15s;
+    }
+    .color-picker-btn:hover { color: var(--text); border-color: var(--muted); }
+    .color-picker-panel {
+      display: none; position: absolute; right: 0; top: calc(100% + 8px);
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      padding: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.12); z-index: 100;
+      min-width: 180px;
+    }
+    .color-picker-panel.open { display: block; }
+    .color-picker-panel input[type=color] {
+      width: 100%; height: 36px; border: 1px solid var(--border); border-radius: 6px;
+      cursor: pointer; padding: 2px; background: none;
+    }
+    .color-presets { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+    .color-preset {
+      width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--border);
+      cursor: pointer; padding: 0; transition: transform .1s;
+    }
+    .color-preset:hover { transform: scale(1.2); border-color: var(--muted); }
+    .color-reset {
+      margin-top: 10px; width: 100%; font-size: 12px; padding: 5px;
+      border: 1px solid var(--border); border-radius: 6px; background: none;
+      cursor: pointer; color: var(--muted);
+    }
+    .color-reset:hover { background: var(--bg); color: var(--text); }
+  </style>
+  <script>
+    (function() {
+      var saved = localStorage.getItem('nm_bg');
+      if (saved) document.documentElement.style.setProperty('--bg', saved);
+    })();
+  </script>
   <script>
     document.addEventListener('submit', function(e) {
       var form = e.target;
@@ -31,6 +86,41 @@
       spinner.style.cssText = 'width:13px;height:13px;border-width:2px;margin-right:6px;vertical-align:middle;';
       btn.insertBefore(spinner, btn.firstChild);
     });
+
+    // Color picker
+    var btn = document.getElementById('colorPickerBtn');
+    var panel = document.getElementById('colorPickerPanel');
+    var input = document.getElementById('bgColorInput');
+    var reset = document.getElementById('colorReset');
+
+    var saved = localStorage.getItem('nm_bg');
+    if (saved) input.value = saved;
+
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      panel.classList.toggle('open');
+    });
+    document.addEventListener('click', function(e) {
+      if (!panel.contains(e.target) && e.target !== btn) panel.classList.remove('open');
+    });
+    input.addEventListener('input', function() {
+      apply(input.value);
+    });
+    document.querySelectorAll('.color-preset').forEach(function(p) {
+      p.addEventListener('click', function() {
+        apply(p.dataset.color);
+        input.value = p.dataset.color;
+      });
+    });
+    reset.addEventListener('click', function() {
+      localStorage.removeItem('nm_bg');
+      document.documentElement.style.removeProperty('--bg');
+      input.value = '#f8f9fa';
+    });
+    function apply(color) {
+      document.documentElement.style.setProperty('--bg', color);
+      localStorage.setItem('nm_bg', color);
+    }
   </script>
 </body>
 </html>

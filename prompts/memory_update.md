@@ -29,7 +29,7 @@ Update the memory document to reflect what we now know. Follow these rules:
 
 1. MERGE, don't replace. Preserve existing knowledge.
 2. Update confidence levels upward when new signals confirm existing beliefs.
-3. Add new pain points, objections, org changes, or engagement signals as discovered.
+3. Add new pain points, objections, org changes, or engagement signals as discovered. When a signal creates a new pain point, set `source_signal_id` to that signal's `id`. When a signal confirms an existing pain point (updating `last_confirmed` or raising `confidence`), also update `source_signal_id` to that signal's `id`.
 4. Update engagement_history with the latest contact dates and response signals.
 5. Update buying_readiness.score and level based on the direction signals point.
 6. Note any timing signals in buying_readiness.timing_notes.

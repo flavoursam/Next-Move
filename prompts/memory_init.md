@@ -35,6 +35,7 @@ The memory document must follow this exact JSON structure:
       "point": "specific pain point",
       "confidence": "high | medium | low",
       "source": "crm_conversation | crm_signal | website_observation | vertical_inference",
+      "source_signal_id": null,
       "first_noted": "YYYY-MM-DD",
       "last_confirmed": "YYYY-MM-DD",
       "used_as_angle": false,

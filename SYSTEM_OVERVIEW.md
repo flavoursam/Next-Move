@@ -44,7 +44,7 @@ Between approvals, NextMove monitors Close for new activity, updates account mem
 │  │    POST /accounts/{id}/actions/{aid}/reject   Reject action         │ │
 │  │    POST /accounts/{id}/actions/{aid}/rethink  New action (excl used)│ │
 │  │    POST /accounts/{id}/refresh   Manual signal ingest + rescrape    │ │
-│  │    POST /accounts/{id}/run-fresh  Run 5-stage pipeline (stateless)  │ │
+│  │    POST /accounts/{id}/run-fresh  Run 6-stage pipeline (stateless)  │ │
 │  │    POST /accounts/{id}/reinit-memory  Rebuild memory from scratch   │ │
 │  │    GET  /accounts/new      Add account form (direct memory tracking)│ │
 │  │    POST /accounts/new                                                │ │
@@ -80,6 +80,11 @@ Between approvals, NextMove monitors Close for new activity, updates account mem
 │  │   actions            recommendations — source: memory | fresh |     │  │
 │  │                       neglected                                     │  │
 │  │   commission_events  demo detected → 10% of opp value               │  │
+│  │                                                                     │  │
+│  │   (legacy — not the primary data path)                              │  │
+│  │   sequences          multi-lead sequence tracking                   │  │
+│  │   touchpoints        per-sequence touchpoint records                │  │
+│  │   gate_verdicts      after-touchpoint gate classifier results       │  │
 │  └─────────────────────────────────────────────────────────────────────┘  │
 └────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -136,7 +141,7 @@ Rep opens /accounts/{id}
           └── Right: Fresh Pipeline
               If not run: "↺ Run" button
               If running: spinner + auto-refresh (6s)
-              If done: full 5-stage result independent of memory
+              If done: full 6-stage result independent of memory
                        Use This + Draft  |  Dismiss
 ```
 
@@ -280,6 +285,7 @@ scheduler.py fires (every 1 hour)
 | `REP_PHONE` | Phone number used in voicemails | Optional |
 | `NEXTMOVE_MODEL` | Claude model override for stages 1/4/5/6 (default: `claude-sonnet-4-6`) | Optional |
 | `NEXTMOVE_PLANNING_MODEL` | Model for stages 2/3 + memory/action (default: `claude-opus-4-7`) | Optional |
+| `CLOSE_WRITEBACK_ENABLED` | Push approved drafts into Close as email drafts/notes (default: `false`) | Optional |
 
 ---
 

@@ -36,6 +36,39 @@ Each pain point carries:
 
 Confidence goes UP when new CRM signals confirm a point. It decays DOWN automatically over time — see Confidence Decay below.
 
+### Pain point source attribution
+
+Each pain point also carries a `source_signal_id` — the ID of the specific Close activity (call note, email, CRM note) that created or last confirmed it. This is the receipt behind every claim in memory.
+
+**Example — without source attribution:**
+```json
+{
+  "point": "Losing 30% of bookings to Booking.com commission",
+  "confidence": "high",
+  "source": "crm_conversation",
+  "last_confirmed": "2026-04-10"
+}
+```
+You can see it's high confidence but can't verify *which* conversation established it.
+
+**With source attribution:**
+```json
+{
+  "point": "Losing 30% of bookings to Booking.com commission",
+  "confidence": "high",
+  "source": "crm_conversation",
+  "source_signal_id": 47,
+  "last_confirmed": "2026-04-10"
+}
+```
+Signal ID 47 is a row in the `signals` table. That row holds the full raw Close activity — the actual call note or email Claude read when it created this pain point. You can look it up and show the source.
+
+**Why this matters:**
+- A colleague asks "how do you know they care about OTA commission?" → look up signal 47, pull the Close activity, show the call note where the operator said it
+- A high-confidence pain point feels wrong → trace it to the signal and see if Claude over-interpreted something weak
+- Expanding to new teams or verticals → people can audit why the system recommends a particular angle. Trust comes from traceability, not "the AI said so"
+- If `source_signal_id` is **null**: the pain point came from the initial Stage 1 assessment (CRM data at account creation), before the signal ingestion loop started. That's expected and fine.
+
 ---
 
 ## How memory is created and updated
@@ -135,7 +168,7 @@ On each account page you have two options:
 
 **Memory-based (stateful):** Uses the accumulated account memory. Fast, context-aware, incorporates everything ever learned. This is the default recommendation.
 
-**Fresh pipeline:** Runs all 5 pipeline stages against current Close data, ignoring the memory document entirely. Slower (5 Claude API calls), but useful when you suspect memory is stale or want an independent second opinion. The fresh result appears as a purple card alongside the memory-based recommendation.
+**Fresh pipeline:** Runs all 6 pipeline stages against current Close data, ignoring the memory document entirely. Slower (5 Claude API calls), but useful when you suspect memory is stale or want an independent second opinion. The fresh result appears as a purple card alongside the memory-based recommendation.
 
 **Important:** Fresh pipeline results do NOT update account memory even if approved. Memory only updates through signal ingestion. The fresh pipeline is a read-only view of what the pipeline would say today.
 

@@ -553,19 +553,20 @@ def _generate_and_log_draft(account_id: int, action_id: int):
         lead_id = db.get_account(account_id)["crm_lead_id"]
         action_type = action["type"]
 
-        if action_type == "send_email":
-            email = draft.get("email") or {}
-            create_email_draft(
-                lead_id,
-                payload.get("contact_email"),
-                email.get("subject", ""),
-                email.get("body", ""),
-            )
-        elif action_type in ("call", "voicemail"):
-            call = draft.get("call") or {}
-            script = call.get("script") or call.get("voicemail") or ""
-            label = "Call Script" if action_type == "call" else "Voicemail Script"
-            create_note(lead_id, f"[NextMove {label}]\n\n{script}")
+        if os.getenv("CLOSE_WRITEBACK_ENABLED", "false").lower() == "true":
+            if action_type == "send_email":
+                email = draft.get("email") or {}
+                create_email_draft(
+                    lead_id,
+                    payload.get("contact_email"),
+                    email.get("subject", ""),
+                    email.get("body", ""),
+                )
+            elif action_type in ("call", "voicemail"):
+                call = draft.get("call") or {}
+                script = call.get("script") or call.get("voicemail") or ""
+                label = "Call Script" if action_type == "call" else "Voicemail Script"
+                create_note(lead_id, f"[NextMove {label}]\n\n{script}")
 
     except Exception:
         pass

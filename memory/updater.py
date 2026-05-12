@@ -28,6 +28,27 @@ def _fill(template: str, **kwargs) -> str:
     return template
 
 
+_REQUIRED_KEYS = {
+    "pain_points", "engagement_history", "org_intelligence",
+    "buying_readiness", "account_context", "summary", "memory_version",
+}
+_VALID_CONFIDENCE = {"high", "medium", "low"}
+
+
+def _validate(memory: dict) -> None:
+    missing = _REQUIRED_KEYS - memory.keys()
+    if missing:
+        raise ValueError(f"Memory missing required keys: {missing}")
+    if not isinstance(memory["pain_points"], list):
+        raise ValueError("pain_points must be a list")
+    for pp in memory["pain_points"]:
+        conf = pp.get("confidence")
+        if conf not in _VALID_CONFIDENCE:
+            raise ValueError(f"Invalid confidence value: {conf!r}")
+    if not isinstance(memory.get("memory_version"), int):
+        raise ValueError("memory_version must be an int")
+
+
 def _call(prompt: str) -> dict:
     response = _client.messages.create(
         model=MODEL,
@@ -40,7 +61,9 @@ def _call(prompt: str) -> dict:
         text = parts[1] if len(parts) > 1 else text
         if text.startswith("json"):
             text = text[4:]
-    return json.loads(text.strip())
+    memory = json.loads(text.strip())
+    _validate(memory)
+    return memory
 
 
 def init(assessment: dict, lead_snapshot: dict, vertical_context: str) -> dict:
@@ -55,7 +78,7 @@ def init(assessment: dict, lead_snapshot: dict, vertical_context: str) -> dict:
 
 
 def update(current_memory: dict, new_signals: list[dict], vertical_context: str) -> dict:
-    """Merge new signals into the existing memory document. Returns the updated memory."""
+    """Merge new signals into existing memory. Raises ValueError if result fails validation."""
     prompt = _fill(
         _load_prompt("memory_update.md"),
         current_memory=current_memory,
